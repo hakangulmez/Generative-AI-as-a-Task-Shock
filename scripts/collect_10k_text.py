@@ -99,7 +99,9 @@ def _search_filings_block(block: dict) -> Optional[Tuple[str, str, str, str]]:
     """Search a filings block for annual report before cutoff.
 
     Filings are in reverse chronological order, so the first match is the
-    most recent. This ensures a 2022 40-F is preferred over a 2005 20-F.
+    most recent.  Prefers non-amended forms (10-K, 20-F, 40-F) over amended
+    variants (10-K/A, 20-F/A, 40-F/A) because amended filings often have
+    non-standard HTML that breaks Item 1 extraction.
 
     Returns (accession, filing_date, primary_document, form_type) or None.
     """
@@ -109,13 +111,24 @@ def _search_filings_block(block: dict) -> Optional[Tuple[str, str, str, str]]:
     primary_docs = block.get("primaryDocument", [])
 
     annual_set = set(ANNUAL_TYPES)
+    non_amended = {"10-K", "10-K405", "20-F", "40-F"}
 
+    best = None
     for i, form in enumerate(forms):
-        if form.strip() in annual_set and dates[i] < CUTOFF_DATE:
-            pdoc = primary_docs[i] if i < len(primary_docs) else ""
-            return (accessions[i], dates[i], pdoc, form.strip())
+        form = form.strip()
+        if form not in annual_set or dates[i] >= CUTOFF_DATE:
+            continue
+        pdoc = primary_docs[i] if i < len(primary_docs) else ""
+        candidate = (accessions[i], dates[i], pdoc, form)
+        if best is None:
+            best = candidate
+            if form in non_amended:
+                break  # non-amended and most recent — ideal
+        elif best[3] not in non_amended and form in non_amended:
+            best = candidate
+            break  # upgraded from amended to non-amended
 
-    return None
+    return best
 
 
 def find_10k(cik: int) -> Optional[Tuple[str, str, str, str]]:
@@ -579,6 +592,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--test", action="store_true",
                         help="Run on 5 test firms only")
+    parser.add_argument("--tickers", nargs="+", metavar="TICKER",
+                        help="Specific tickers to extract (e.g. --tickers MSFT CRM)")
     args = parser.parse_args()
 
     t0 = time.time()
@@ -588,7 +603,14 @@ def main():
     df = pd.read_csv(INPUT_PATH)
     df = df[df["meets_filters"] == True].reset_index(drop=True)
 
-    if args.test:
+    if args.tickers:
+        requested = [t.upper() for t in args.tickers]
+        df = df[df["ticker"].isin(requested)].reset_index(drop=True)
+        missing = set(requested) - set(df["ticker"])
+        if missing:
+            print("WARNING: not in firm_universe.csv: %s" % ", ".join(sorted(missing)), flush=True)
+        print("TICKERS MODE: %d firms\n" % len(df), flush=True)
+    elif args.test:
         df = df[df["ticker"].isin(TEST_TICKERS)].reset_index(drop=True)
         print("TEST MODE: %d firms\n" % len(df), flush=True)
 
