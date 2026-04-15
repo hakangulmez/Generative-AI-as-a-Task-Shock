@@ -46,8 +46,10 @@ Two-way fixed effects DiD. Inference via wild cluster bootstrap (WCB), clustered
 | Item | Location | Notes |
 |---|---|---|
 | All figure code | `notebooks/thesis_notebook.ipynb` | ONLY here, no separate .py scripts for figures |
+| Firm universe | `scripts/build_firm_universe.py` | SEC EDGAR SIC 7370-7379, companyfacts API |
 | 10-K extraction | `scripts/collect_10k_text.py` | SEC EDGAR only, no Wayback/product pages |
-| Scoring | `scripts/score_rubric_contrast.py` | Literature rubric is primary |
+| Financial panel | `scripts/build_financial_panel.py` | Quarterly revenue from companyfacts XBRL |
+| Scoring | `scripts/score_literature_rubric.py` | Literature rubric is primary (to be written) |
 | R regressions | `analysis/did_main.R`, `analysis/wcb_rubric.R` | |
 | LaTeX manuscript | Overleaf only | `thesis.tex` is gitignored, NEVER commit it |
 
@@ -74,21 +76,20 @@ Two-way fixed effects DiD. Inference via wild cluster bootstrap (WCB), clustered
 ## File Index
 
 ```
-scripts/collect_10k_text.py       → SEC EDGAR 10-K extractor
-scripts/score_rubric_contrast.py  → SBERT contrast scoring (Literature Rubric)
-scripts/score_rubric_sentlevel.py → Sentence-level rubric scoring
-scripts/score_onet_similarity.py  → O*NET similarity (robustness)
-scripts/build_firm_texts.py       → Aggregate texts to CSV
+scripts/build_firm_universe.py      → SEC EDGAR firm universe (248 firms, SIC 7370-7379)
+scripts/collect_10k_text.py         → 10-K Item 1 + 1A extraction (239/248 firms)
+scripts/build_financial_panel.py    → Quarterly revenue panel from companyfacts (4,696 obs)
+scripts/score_literature_rubric.py  → PRIMARY scoring: Claude Opus literature rubric (to be written)
 
-analysis/did_main.R               → Main DiD regressions (Tables 1–3)
-analysis/wcb_rubric.R             → Wild cluster bootstrap p-values
+analysis/did_main.R                 → Main DiD regressions (Tables 1–3)
+analysis/wcb_rubric.R               → Wild cluster bootstrap p-values
 
-notebooks/thesis_notebook.ipynb   → ALL figures (Fig 1–9), data QA, descriptives
+notebooks/thesis_notebook.ipynb     → ALL figures (Fig 1–9), data QA, descriptives
 
-data/raw/firm_universe.csv        → 143 firms: ticker, CIK, company_name, meets_filters
-data/processed/                   → Generated outputs (gitignored)
-text_data/10k_extracts/           → Extracted 10-K texts (gitignored)
-literature_rubric.json            → 10-criterion rubric definition
+data/raw/firm_universe.csv          → 248 firms: ticker, CIK, SIC, exchange, pre_shock_quarters
+data/processed/financial_panel.csv  → Quarterly panel: revenue, gross_profit, rd_expense, sga_expense
+text_data/10k_extracts/             → Extracted 10-K texts (gitignored)
+literature_rubric.json              → 10-criterion rubric definition
 ```
 
 ---
@@ -97,17 +98,17 @@ literature_rubric.json            → 10-criterion rubric definition
 
 | Parameter | Value | Why |
 |---|---|---|
-| Firms in universe | 143 | Full sample from SIC 7370–7379 |
-| Primary sample | n=94 | SME <$200M pre-shock revenue |
-| Extended sample | n=116 | SME <$500M |
+| Firms in universe | 248 | SIC 7370–7379, NYSE/Nasdaq, ≥6 pre-shock XBRL quarters |
+| Panel observations | 4,696 | Firm-quarter (2019Q1–2025Q4) |
+| 10-K extractions | 239/248 | 9 failures due to non-standard HTML |
+| Primary sample | TBD | SME <$200M pre-shock revenue (to be recomputed) |
+| Extended sample | TBD | SME <$500M (to be recomputed) |
 | Shock date | 2022Q4 (2022-11-30) | ChatGPT release |
 | Extraction cutoff | 2022-11-01 | Pre-shock |
-| Panel period | 2020Q1–2025Q4 | 24 quarters max |
-| Primary β | −0.604 | WCB p=0.003 |
+| Panel period | 2019Q1–2025Q4 | Up to 28 quarters |
+| Primary β | −0.604 | WCB p=0.003 (prior pipeline, to be recomputed) |
 | Construct validity r | 0.895 | LLM Judge vs Lit Rubric |
-| Three-period: Early | −0.451 (p=0.022) | 2022Q4–2023Q4 |
-| Three-period: Advanced | −0.686 (p=0.008) | 2024Q1+ |
-| Intensification | 1.52× | Advanced / Early |
+| Three-period | TBD | Must use Literature Rubric (prior values used LLM Judge — incorrect) |
 
 ---
 
@@ -132,6 +133,7 @@ R&D intensity sits exclusively in **Table 3** (Mechanism Outcomes), not in the r
 5. **Don't add Wayback/product page fallback** to extraction — SEC EDGAR only
 6. **Don't use post-2022Q4 10-K filings** for scoring — post-shock text is contaminated
 7. **Don't confuse quantity channel with pricing channel** — gross margin insignificance is the key result proving quantity channel
+8. **Don't use LLM Judge for three-period analysis** — three-period (Early/Advanced AI era) MUST use Literature Rubric scores, not holistic `early_ai`/`agentic_ai`
 
 ---
 

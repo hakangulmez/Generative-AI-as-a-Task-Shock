@@ -12,7 +12,7 @@ This repository contains the full empirical pipeline for the master's thesis *"G
 
 The central research question: did the ChatGPT shock (November 2022) generate differential revenue outcomes across B2B software firms according to their **product-level LLM replicability** — the degree to which a firm's product performs cognitive tasks that a general-purpose LLM can now replicate at near-zero marginal cost?
 
-**Core finding:** Among SME-segment B2B software firms (pre-shock revenue <$200M, n=94), a one-unit increase in normalized replicability is associated with **60 log-point lower revenue growth** after the shock (β = −0.604, WCB p = 0.003). The effect intensifies 1.52× from the early AI era (2022Q4–2023Q4) to the advanced AI era (2024Q1+), consistent with an expanding automation frontier.
+**Core finding:** Among SME-segment B2B software firms (pre-shock revenue <$200M), a one-unit increase in normalized replicability is associated with **60 log-point lower revenue growth** after the shock (β = −0.604, WCB p = 0.003). Universe: 248 firms (SIC 7370–7379), ~200 in final sample after revenue-size filtering.
 
 ---
 
@@ -24,8 +24,10 @@ The central research question: did the ChatGPT shock (November 2022) generate di
 | Extended (SME <$500M, Lit Rubric) | −0.541 | 0.002*** | 116 |
 | Quartile (Q75 vs Q25) | −0.286 | 0.005*** | 94 |
 | Pre-period placebo | +0.031 | 0.157 | 94 |
-| Early AI era (2022Q4–2023Q4) | −0.451 | 0.022* | 94 |
-| Advanced AI era (2024Q1+) | −0.686 | 0.008** | 94 |
+| Early AI era (2022Q4–2023Q4) | TBD | TBD | TBD |
+| Advanced AI era (2024Q1+) | TBD | TBD | TBD |
+
+> **Note:** Three-period (Early/Advanced AI era) results to be recomputed with Literature Rubric scores. Prior values used LLM Judge holistic scores — methodologically incorrect for the primary specification.
 
 Gross margin effects are uniformly insignificant (p > 0.4), confirming the **quantity channel**: customers substitute away from high-replicability products entirely rather than renegotiating prices.
 
@@ -37,29 +39,27 @@ Gross margin effects are uniformly insignificant (p > 0.4), confirming the **qua
 thesis-ai-task-shock/
 │
 ├── scripts/
-│   ├── collect_10k_text.py       # SEC EDGAR Item 1 extraction (pre-shock, cutoff 2022-11-01)
-│   ├── score_rubric_contrast.py  # SBERT contrast scoring (Literature Rubric)
-│   ├── score_rubric_sentlevel.py # Sentence-level rubric scoring
-│   ├── score_onet_similarity.py  # O*NET similarity scoring (robustness)
-│   └── build_firm_texts.py       # Combine extracted texts into panel CSV
+│   ├── build_firm_universe.py      # SEC EDGAR firm universe (248 firms, SIC 7370-7379)
+│   ├── collect_10k_text.py         # 10-K Item 1 + 1A extraction (239/248 firms)
+│   ├── build_financial_panel.py    # Quarterly revenue panel from companyfacts (4,696 obs)
+│   └── score_literature_rubric.py  # PRIMARY scoring: Claude Opus literature rubric (TBD)
 │
 ├── analysis/
-│   ├── did_main.R                # Primary DiD regressions + event study
-│   └── wcb_rubric.R              # Wild cluster bootstrap inference
+│   ├── did_main.R                  # Primary DiD regressions + event study
+│   └── wcb_rubric.R                # Wild cluster bootstrap inference
 │
 ├── notebooks/
-│   └── thesis_notebook.ipynb     # All figures (Figures 1–9)
+│   └── thesis_notebook.ipynb       # All figures (Figures 1–9)
 │
 ├── data/
 │   ├── raw/
-│   │   └── firm_universe.csv     # 143 firms: ticker, CIK, company_name
-│   └── processed/                # Generated outputs (gitignored)
+│   │   └── firm_universe.csv       # 248 firms: ticker, CIK, SIC, exchange
+│   └── processed/
+│       └── financial_panel.csv     # Quarterly panel (gitignored)
 │
-├── figures/                      # All thesis figures (PNG)
-│
-├── literature_rubric.json        # Ten-criterion rubric definition
+├── literature_rubric.json          # Ten-criterion rubric definition
 ├── requirements.txt
-├── CLAUDE.md                     # AI assistant instructions for this repo
+├── CLAUDE.md                       # AI assistant instructions for this repo
 └── README.md
 ```
 
@@ -70,13 +70,16 @@ thesis-ai-task-shock/
 ## Data & Measurement Pipeline
 
 ### Step 1 — Universe Construction
-143 NYSE/Nasdaq-listed B2B software firms (SIC 7370–7379), IPO before 2020Q1, with quarterly SEC EDGAR financials available.
+```bash
+python3 scripts/build_firm_universe.py
+```
+248 NYSE/Nasdaq-listed B2B software firms (SIC 7370–7379) with ≥6 quarterly revenue data points in SEC EDGAR companyfacts API (2020Q1–2022Q3). Source: EDGAR submissions + companyfacts XBRL.
 
 ### Step 2 — 10-K Text Extraction
 ```bash
 python3 scripts/collect_10k_text.py
 ```
-Extracts Item 1 Business Description from each firm's most recent 10-K or 20-F filed **before November 1, 2022** (pre-shock cutoff). Source: SEC EDGAR Submissions API (`data.sec.gov/submissions/CIK{cik}.json`). Output: `text_data/10k_extracts/{TICKER}.txt`.
+Extracts full Item 1 Business Description + Item 1A Risk Factors from each firm's most recent 10-K filed **before November 1, 2022** (pre-shock cutoff). 239/248 firms extracted successfully. Source: SEC EDGAR Submissions API. Output: `text_data/10k_extracts/{TICKER}.txt`.
 
 **Critical design choice:** Pre-shock extraction ensures the replicability score reflects pre-existing product architecture, not post-shock AI repositioning. 10-K filings after 2022Q4 increasingly contain strategic language ("AI-powered", "LLM-enabled") that would contaminate the measure.
 
@@ -104,7 +107,10 @@ Each criterion scored −1 / 0 / +1 by Claude Opus; raw score normalized to [1, 
 **Construct validity:** Independent holistic LLM judge scores correlate r = 0.895 with the literature rubric (Figure 2).
 
 ### Step 4 — Financial Panel
-Quarterly revenue and gross margin from SEC EDGAR XBRL inline filings (10-Q, 10-K). XBRL tags: `Revenues` or `RevenueFromContractWithCustomerExcludingAssessedTax` for revenue; `GrossProfit` for gross margin. Panel: 2020Q1–2025Q4, maximum 24 quarterly observations per firm.
+```bash
+python3 scripts/build_financial_panel.py
+```
+Quarterly revenue, gross profit, operating income, R&D expense, and SG&A from SEC EDGAR companyfacts XBRL API. 4,696 firm-quarter observations (2019Q1–2025Q4). Revenue tags tried in priority order; additional metrics extracted where available.
 
 ### Step 5 — DiD Estimation
 ```bash
@@ -143,21 +149,24 @@ pip install -r requirements.txt   # Python: pandas, sentence-transformers, anthr
 
 ### Full pipeline
 ```bash
-# 1. Extract 10-K texts (requires SEC EDGAR access, ~30 min for 143 firms)
+# 1. Build firm universe (SEC EDGAR, ~45 min first run, cached after)
+python3 scripts/build_firm_universe.py
+
+# 2. Extract 10-K texts (SEC EDGAR, ~7 min for 248 firms)
 python3 scripts/collect_10k_text.py
 
-# 2. Score firms (requires ANTHROPIC_API_KEY)
+# 3. Build financial panel (SEC EDGAR companyfacts, ~2 min)
+python3 scripts/build_financial_panel.py
+
+# 4. Score firms (requires ANTHROPIC_API_KEY)
 export ANTHROPIC_API_KEY=your_key_here
-python3 scripts/score_rubric_contrast.py
+python3 scripts/score_literature_rubric.py
 
-# 3. Build financial panel (requires SEC EDGAR access)
-# See thesis_notebook.ipynb — Section: Financial Panel
-
-# 4. Run regressions
+# 5. Run regressions
 Rscript analysis/did_main.R
 Rscript analysis/wcb_rubric.R
 
-# 5. Generate all figures
+# 6. Generate all figures
 jupyter nbconvert --to notebook --execute notebooks/thesis_notebook.ipynb
 ```
 
