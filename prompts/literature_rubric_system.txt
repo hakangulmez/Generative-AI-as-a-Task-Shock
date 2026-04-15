@@ -1,0 +1,15 @@
+[PLACEHOLDER — System prompt for Literature Rubric scorer]
+
+This prompt will be carefully designed based on:
+- Acemoglu & Restrepo (2022) task-based automation framework
+- Eloundou et al. (2024) E0/E1/E2 task classification
+- Brynjolfsson et al. (2025) LLM productivity evidence
+- Frey & Osborne (2017) engineering bottlenecks
+- Handa et al. (2025) real-world LLM usage patterns
+
+Design principles:
+1. Ground each criterion in explicit literature citations
+2. Provide concrete scoring anchors (−1 / 0 / +1) per criterion
+3. Require chain-of-thought reasoning before each score
+4. Instruct model to score product tasks, not company characteristics
+5. Output structured JSON: {criteria: [{criterion, score, reasoning}], normalized_score}
