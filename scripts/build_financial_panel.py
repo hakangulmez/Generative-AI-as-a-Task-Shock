@@ -84,9 +84,14 @@ def extract_quarterly(
     us_gaap: dict, tag: str
 ) -> dict[str, dict]:
     """
-    Extract quarterly entries for a single XBRL tag.
+    Extract quarterly (non-cumulative) entries for a single XBRL tag.
 
     Returns {quarter_label: {"end": ..., "val": ..., "filed": ...}}
+
+    Filters out cumulative (YTD) entries by checking period length:
+    - ~60-100 days = quarterly (keep)
+    - >100 days = cumulative YTD (skip)
+    Also uses 'frame' field as a signal: 'CY2022Q2' = quarterly.
     For duplicate quarters, keeps the entry with the latest filed date.
     """
     if tag not in us_gaap:
@@ -101,6 +106,18 @@ def extract_quarterly(
         end = e.get("end", "")
         if not end or not (PANEL_START <= end <= PANEL_END):
             continue
+
+        # Filter: only true quarterly periods (~90 days), not cumulative
+        start = e.get("start", "")
+        if start and end:
+            try:
+                days = (datetime.strptime(end, "%Y-%m-%d") -
+                        datetime.strptime(start, "%Y-%m-%d")).days
+                if days > 100:
+                    continue  # cumulative (YTD), skip
+            except ValueError:
+                pass
+
         parsed = quarter_from_date(end)
         if not parsed:
             continue
