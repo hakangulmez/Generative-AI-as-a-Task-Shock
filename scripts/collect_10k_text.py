@@ -371,7 +371,8 @@ def extract_item1(html: str, form_type: str = "10-K") -> Optional[str]:
         re.IGNORECASE
     )
     item1_end = re.compile(
-        r"item\s*[1I]\s*a[\s.:\-–—]|item\s*(?:2|II)[\s.:\-–—]",
+        r"(?:^|\n)[ \t]*item\s*[1I]\s*[Aa][\s.:\-–—]\s*risk\s*factors"
+        r"|(?:^|\n)[ \t]*item\s*(?:2|II)[\s.:\-–—]",
         re.IGNORECASE
     )
 
