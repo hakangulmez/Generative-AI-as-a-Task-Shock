@@ -425,16 +425,36 @@ def extract_item1(html: str, form_type: str = "10-K") -> Optional[str]:
     return result
 
 
+_NOISE_LINES = {
+    "table of contents",
+    "index to financial statements",
+    "index",
+    "continued",
+    "(continued)",
+    "(in thousands)",
+    "(in millions)",
+    "(dollars in thousands)",
+    "(dollars in millions)",
+}
+
 def _clean_section(section: str) -> str:
     """Clean extracted section text, preserving section headers."""
     lines = section.split("\n")
     cleaned = []
+    prev_blank = False
     for line in lines:
         stripped = line.strip()
+        # Collapse consecutive blank lines to one
         if not stripped:
-            cleaned.append("")
+            if not prev_blank:
+                cleaned.append("")
+            prev_blank = True
             continue
-        # Keep short lines if they look like headers (title case or caps)
+        prev_blank = False
+        # Drop known boilerplate lines
+        if stripped.lower() in _NOISE_LINES:
+            continue
+        # Keep short lines if they look like section headers
         if len(stripped) < 60:
             is_header = (
                 stripped.istitle() or
@@ -447,7 +467,7 @@ def _clean_section(section: str) -> str:
         # Remove very short non-header lines
         if len(stripped) < 10:
             continue
-        # Remove pure number lines
+        # Remove pure number lines (page numbers)
         if re.match(r"^[\d\s.]+$", stripped):
             continue
         cleaned.append(stripped)
