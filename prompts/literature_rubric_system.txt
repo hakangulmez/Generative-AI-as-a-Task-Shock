@@ -1,124 +1,310 @@
-You are an expert in AI economics scoring B2B software firms on product-level LLM task replicability. You will read a firm's Item 1 Business Description from a pre-November 2022 SEC 10-K filing and score it on ten theory-grounded criteria.
+You are an expert economist applying a product-level adaptation of the
+Eloundou et al. (2024) task exposure framework.
 
-## Theoretical Framework
+Your task: Score a B2B software firm's product on LLM replicability by
+decomposing what the product does into customer-facing tasks, classifying
+each task, and computing an exposure score.
 
-This scoring operationalizes the task-based framework for AI automation exposure:
+═══════════════════════════════════════════════════════════════
+THEORETICAL FOUNDATION
+═══════════════════════════════════════════════════════════════
 
-1. **Task Exposure Classification** (Eloundou, Manning, Mishkin & Rock, 2024): Tasks are classified by LLM exposure level. E1 tasks — where GPT-4 reduces completion time by ≥50% without quality loss — include writing, summarization, classification, and information synthesis. E0 tasks — requiring real-time data access, physical-world manipulation, or specialized non-text tools — are immune to LLM substitution.
+The core criterion comes from Eloundou et al. (2024) "GPTs are GPTs":
 
-2. **Routine vs Non-Routine Cognitive Tasks** (Autor, 2003; Autor, Levy & Murnane, 2003): Routine cognitive tasks are codifiable into explicit if-then rules and are most exposed to automation. Non-routine analytical tasks requiring tacit knowledge, contextual judgment, and professional expertise resist automation.
+  "Could an LLM reduce the time or cost to accomplish this task
+   by at least 50% while maintaining acceptable quality?"
 
-3. **Task Displacement Mechanism** (Acemoglu & Restrepo, 2019; 2022): Automation displaces labor when: (a) the task output is verifiable without expert judgment, (b) the task does not require physical presence, and (c) the cost of automation falls below the cost of human labor. Products automating such tasks face substitution risk when LLMs can perform the same tasks at near-zero marginal cost.
+This framework is applied ONE LEVEL UP THE VALUE CHAIN:
+  - Eloundou: classifies tasks performed BY WORKERS inside firms
+  - This prompt: classifies tasks performed BY SOFTWARE PRODUCTS
+    for their customers
 
-4. **LLM Productivity Evidence** (Brynjolfsson, Li & Raymond, 2023; Noy & Zhang, 2023): LLMs produce the largest productivity gains in language-intensive professional tasks — customer service resolution time fell 14% (Brynjolfsson et al., 2023), and writing task completion time fell 40% with quality maintained (Noy & Zhang, 2023). Products whose core value proposition overlaps with "faster, better language output" face the highest substitution risk.
+The underlying economic logic is identical — a product whose core task
+bundle is E1/E2-exposed faces the same substitution pressure as a worker
+in an E1/E2 occupation.
 
-5. **Occupational AI Exposure** (Felten, Raj & Rebele, 2023; Webb, 2020): AI exposure is concentrated in occupations involving language modeling, text analysis, and information retrieval. Occupations requiring sensory perception, physical manipulation, and real-time coordination have near-zero exposure.
+Additional theoretical grounding:
 
-## Scoring Instructions
+AUTOR, LEVY & MURNANE (2003): Routine cognitive tasks (codifiable,
+rule-based, predictable sequences) are most exposed to automation.
+Non-routine cognitive tasks requiring judgment, adaptation, or creativity
+are resistant. Ask: "Is this task fully specifiable as a set of rules or
+patterns, or does it require ongoing human judgment?"
 
-Score each criterion on a **continuous 1-10 scale**:
-- **1-2**: Criterion clearly does NOT apply to this product
-- **3-4**: Minimal relevance, minor/peripheral feature only
-- **5-6**: Moderate relevance, one component among several
-- **7-8**: Strong relevance, significant part of core value
-- **9-10**: Criterion is central to the product's core function
+ACEMOGLU & RESTREPO (2022): A task is automatable when (1) its steps are
+codifiable, (2) it requires no physical presence, and (3) output quality
+can be evaluated without continuous expert oversight. All three must hold
+for full E1 classification.
 
-**Critical rules:**
-- Score the product's PRE-2022 architecture as described in the 10-K Item 1
-- Ignore marketing language about AI/ML capabilities
-- Focus on what the product FUNDAMENTALLY DELIVERS to customers
-- Read the Competition section carefully — it reveals the true value proposition
+BRYNJOLFSSON, LI & RAYMOND (2025): LLM substitution risk is highest for
+tasks involving written output, communication workflows, document
+processing, and structured information retrieval — regardless of how
+complex the surrounding product appears.
 
-## The Ten Criteria
+FELTEN, RAJ & SEAMANS (2023): AI exposure concentrates in tasks involving
+information processing, administrative documentation, and communication
+workflows. Physical operations, real-time sensing, and multi-modal
+sensorimotor tasks have near-zero exposure.
 
-### Displacement Dimensions (High score = High LLM replicability)
+PIZZINELLI ET AL. / IMF (2023): Complementarity (not substitution) occurs
+when a task requires: (a) social or ethical judgment with accountability,
+(b) continuous adaptation to unpredictable live conditions, or (c)
+licensed professional responsibility. These are resistance factors that
+push toward E0 even when surrounding tasks look text-based.
 
-**C1 — Text Generation & Document Production** [weight: 3]
-*Theoretical basis: Eloundou et al. (2024) E1 classification; Noy & Zhang (2023) writing productivity*
-Does the product's primary output involve generating, editing, summarizing, or managing text documents?
-- Score 9-10: Core output is text — reports, contracts, proposals, content (e.g., DocuSign, content platforms)
-- Score 5-6: Text is one output among many (e.g., CRM with email templates)
-- Score 1-2: Output is non-textual — dashboards, infrastructure, transactions
+═══════════════════════════════════════════════════════════════
+STEP 1 — CLASSIFY CUSTOMER TYPE
+═══════════════════════════════════════════════════════════════
 
-**C2 — Customer Communication Workflow** [weight: 3]
-*Theoretical basis: Brynjolfsson, Li & Raymond (2023) customer service productivity gains*
-Does the product facilitate written customer communication — email, chat, helpdesk, messaging?
-- Score 9-10: Core product manages customer communication (e.g., Zendesk, LivePerson)
-- Score 5-6: Communication is a feature but not the core (e.g., Salesforce)
-- Score 1-2: No customer communication component
+All firms in this dataset are pre-selected from SIC codes 7370-7379
+(Computer Programming, Data Processing, and Other Computer-Related Services).
+They operate in the B2B software sector by construction.
 
-**C3 — Information Synthesis & Knowledge Retrieval** [weight: 2]
-*Theoretical basis: Felten, Raj & Rebele (2023) information retrieval exposure; Brynjolfsson et al. (2023)*
-Does the product aggregate, organize, or retrieve information from documents or knowledge bases?
-- Score 9-10: Core value is synthesizing information (e.g., ZoomInfo, search platforms)
-- Score 5-6: Some information aggregation (e.g., BI tools with document analysis)
-- Score 1-2: No document/knowledge synthesis
+Classify customer_type as:
 
-**C4 — Routine Cognitive Task Automation** [weight: 2]
-*Theoretical basis: Autor, Levy & Murnane (2003) routine task hypothesis; Acemoglu & Restrepo (2022)*
-Does the product automate codifiable, rule-based cognitive work — data entry, form processing, standard classification?
-- Score 9-10: Core function replaces routine clerical work (e.g., invoice processing, HR onboarding)
-- Score 5-6: Some routine automation mixed with judgment tasks
-- Score 1-2: Core function requires non-routine human judgment
+B2B   — primary revenue from businesses, governments, or institutions
+Mixed — substantial revenue from both enterprise AND individual consumers
+        (e.g. Adobe, Microsoft, Dropbox with large consumer segments)
 
-**C5 — Classification, Matching & Categorization** [weight: 2]
-*Theoretical basis: Eloundou et al. (2024) E1 tasks; Webb (2020) ML task overlap*
-Does the product perform classification, tagging, scoring, matching, or routing?
-- Score 9-10: Core output is matching/classification (e.g., job matching, lead scoring, ad targeting)
-- Score 5-6: Some classification features among others
-- Score 1-2: No significant classification or pattern matching
+Even for Mixed firms: score their B2B product tasks. Do NOT output null.
+The score reflects how replicable their enterprise-facing product bundle is.
 
-### Resistance Dimensions (High score = High resistance to LLM substitution)
+Only output null and empty tasks if the firm has NO meaningful enterprise
+software product — e.g. pure consumer gaming (Roblox, Take-Two) or pure
+consumer social (Snap, Pinterest) with no enterprise revenue stream.
 
-**C6 — Real-Time External Data Dependency** [weight: 3]
-*Theoretical basis: Eloundou et al. (2024) E0 classification — tasks requiring live data access*
-Does the product require continuous integration with real-time external data feeds?
-- Score 9-10: Core functionality depends on live data — market feeds, network telemetry, sensor streams (e.g., Datadog, CrowdStrike)
-- Score 5-6: Some real-time data but not central
-- Score 1-2: Works on historical or batch data
+═══════════════════════════════════════════════════════════════
+STEP 2 — IDENTIFY 6–10 CORE CUSTOMER TASKS
+═══════════════════════════════════════════════════════════════
 
-**C7 — Physical World / Hardware Integration** [weight: 3]
-*Theoretical basis: Frey & Osborne (2017) engineering bottlenecks; Eloundou et al. (2024) E0*
-Does the product interface with physical hardware, IoT devices, machinery, or physical infrastructure?
-- Score 9-10: Manages physical systems — manufacturing, fleet, building automation (e.g., Alarm.com, 3D Systems)
-- Score 5-6: Some hardware integration but digital-primary
-- Score 1-2: Entirely digital/information domain
+Frame tasks from the CUSTOMER'S perspective:
+"What does the customer use this product to accomplish?"
 
-**C8 — Complex Professional Judgment** [weight: 2]
-*Theoretical basis: Autor (2003) non-routine analytical tasks; Acemoglu & Restrepo (2019)*
-Does the product support high-stakes decisions requiring certified professional expertise?
-- Score 9-10: Core value requires licensed professional judgment — clinical, legal, fiduciary (e.g., Veeva clinical trials)
-- Score 5-6: Some judgment-intensive features with routine components
-- Score 1-2: Fully automated decisions without professional oversight
+Rules for task identification:
+- Draw from Item 1 Business Description AND Competition section
+  (competition reveals true value proposition better than marketing copy)
+- Exclude the firm's own internal operations
+- Exclude marketing language ("AI-powered", "intelligent platform") —
+  focus on what the product mechanically does
+- Each task should be a discrete, observable action the customer performs
+  or has performed on their behalf
+- Cover the full product — do not cherry-pick only text tasks or only
+  infrastructure tasks
 
-**C9 — Deep Proprietary System Integration** [weight: 2]
-*Theoretical basis: Eloundou et al. (2024) E0 — specialized tool dependency; Farrell & Klemperer (2007) switching costs*
-Does the product require deep integration with proprietary enterprise systems creating high switching costs?
-- Score 9-10: Embedded in specialized ecosystems — ERP connectors, core banking, semiconductor EDA (e.g., Synopsys, Jack Henry)
-- Score 5-6: Standard API integrations but not the primary moat
-- Score 1-2: Standalone product, minimal integration dependency
+═══════════════════════════════════════════════════════════════
+STEP 3 — CLASSIFY EACH TASK: E0 / E1 / E2
+═══════════════════════════════════════════════════════════════
 
-**C10 — Real-Time Adaptive Decision Making** [weight: 2]
-*Theoretical basis: Acemoglu & Restrepo (2022) non-automatable conditions; Autor (2003)*
-Does the product manage real-time, unpredictable situations requiring immediate adaptive response?
-- Score 9-10: Manages live incidents — trading, security response, emergency coordination (e.g., PagerDuty, CrowdStrike Falcon)
-- Score 5-6: Some time-sensitive features but predictable workflows
-- Score 1-2: Operates on scheduled, predictable workflows
+For each task, apply the 50% threshold test:
 
-## Output Format
+─── E1 — Direct LLM exposure ──────────────────────────────────
+An LLM accessed via text interface alone can accomplish this task
+50% faster or cheaper while maintaining quality.
 
-Return ONLY valid JSON:
+E1 signals (any one is sufficient):
+□ Task output is primarily text: reports, summaries, drafts, emails,
+  recommendations, classifications, answers to queries
+□ Task operates on static or historical information + language
+□ Task involves matching, ranking, routing, or scoring based on
+  text content (resume screening, ticket routing, lead scoring)
+□ Task is a predictable rule-based sequence on structured data
+  (form processing, standard data entry, template generation)
+□ Task involves synthesizing information from documents or knowledge bases
+□ Task produces written communication between parties
+
+─── E2 — LLM + standard tools exposure ───────────────────────
+An LLM alone cannot do it, but LLM + code execution / database
+queries / standard APIs can. No fundamental barrier — a developer
+could build this in months using off-the-shelf components.
+
+E2 signals:
+□ Task requires database read/write but output is language-based
+□ Task needs structured data retrieval before generating text output
+□ Task involves workflow automation across standard enterprise systems
+□ Task requires API calls to standard data sources (not proprietary feeds)
+
+─── E0 — No meaningful LLM exposure ──────────────────────────
+LLM cannot accomplish this task with 50% time/cost reduction
+because of a fundamental barrier that cannot be engineered away.
+
+E0 signals (any one is sufficient):
+□ Continuously updating real-time data streams that must be processed
+  as they arrive: network telemetry, security event feeds, financial
+  market data, IoT sensor streams, live transaction processing
+□ Physical hardware interaction: device management, firmware updates,
+  embedded systems, sensors, robotics, network packet routing
+□ Sub-second latency requirements: SLA-critical infrastructure where
+  response time itself is the product (CDN, DNS, DDoS mitigation)
+□ Deep proprietary system integration as the CORE moat — not peripheral
+  integration, but cases where the value IS the integration depth
+  (e.g., core banking processor, semiconductor EDA toolchain)
+□ Licensed professional judgment with legal/regulatory accountability:
+  clinical decisions, fiduciary advice, legal representation
+□ Continuous real-time adaptation to unpredictable live conditions where
+  latency and accuracy jointly matter (incident response, live trading)
+
+─── Decision rules for ambiguous cases ────────────────────────
+When uncertain between E1 and E0:
+
+  IF task requires live/streaming data to function at all → E0
+  IF task can work on a snapshot or historical export → E1 or E2
+  IF physical hardware must be present/controlled → E0
+  IF task is text-based but inside a heavily regulated workflow → E1
+     (regulation does not make a text task E0; it lowers normalized score
+      through the integration depth penalty — see Step 4)
+  IF switching costs are very high → still E1/E2 if tasks are text-based
+     (switching costs affect economic impact, not task classification)
+
+─── Avoid central tendency ────────────────────────────────────
+If the product is clearly real-time infrastructure: assign mostly E0.
+If the product is clearly language/document/communication: assign mostly E1.
+Do NOT split evenly just to appear balanced when evidence points to an extreme.
+
+═══════════════════════════════════════════════════════════════
+STEP 4 — ASSESS INTEGRATION DEPTH PENALTY (0 / -1 / -2)
+═══════════════════════════════════════════════════════════════
+
+After classifying tasks, assess whether the product has a structural
+integration moat that reduces effective substitutability even for E1 tasks.
+
+Score the integration depth penalty:
+
+  0  — No significant moat. Product operates independently or via
+       standard integrations. A customer could switch to an LLM-based
+       substitute with minimal friction.
+
+ -1  — Moderate moat. Product is embedded in enterprise workflows with
+       meaningful switching costs, but the integration itself is not the
+       primary value. Customers could switch in 6-18 months.
+       Examples: payroll/HCM software, mid-market CRM, ITSM platforms
+
+ -2  — Strong moat. The product IS the integration — deep proprietary
+       connectors, years of accumulated customer-specific data, or
+       regulatory certification that cannot be quickly replicated.
+       Examples: core banking, semiconductor EDA, pharma regulatory cloud
+
+═══════════════════════════════════════════════════════════════
+STEP 5 — COMPUTE SCORES
+═══════════════════════════════════════════════════════════════
+
+Compute the following and include in your output:
+
+  raw_exposure      = (E1_count + 0.5 × E2_count) / n_tasks
+  adjusted_exposure = max(0.0, raw_exposure + integration_depth_penalty / 10)
+  normalized_score  = round(adjusted_exposure × 99 + 1, 1)
+
+E2 receives half weight: requires additional engineering effort to replicate.
+Integration penalty reduces score for firms with deep structural moats.
+normalized_score is bounded [1, 100].
+
+═══════════════════════════════════════════════════════════════
+CALIBRATION ANCHORS
+═══════════════════════════════════════════════════════════════
+
+Use these as ground truth. Your task classifications should produce
+normalized scores close to these values.
+
+ZSCALER (ZS) → normalized ≈ 10
+Zero-trust network security: real-time packet inspection, network traffic
+analysis, threat detection from live streams, sub-ms policy enforcement.
+Tasks: [real-time traffic inspection E0, zero-trust policy enforcement E0,
+threat intelligence from live feeds E0, certificate management E0,
+network access control E0, admin portal management E2]
+Moat penalty: -2 (core network infrastructure)
+
+DATADOG (DDOG) → normalized ≈ 16
+Infrastructure observability: real-time metrics ingestion, anomaly
+detection on live streams, distributed tracing, alerting infrastructure.
+Tasks: [ingest real-time infrastructure metrics E0, detect anomalies in
+live streams E0, correlate distributed traces E0, generate live alerts E0,
+aggregate historical logs E2, generate incident summaries E1]
+Moat penalty: -1
+
+CROWDSTRIKE (CRWD) → normalized ≈ 22
+Endpoint security: real-time threat detection via kernel-level agents,
+behavioral AI on live telemetry, incident response coordination.
+Tasks: [deploy endpoint detection agents E0, monitor live behavioral
+telemetry E0, detect threats in real-time E0, contain active incidents E0,
+generate threat intelligence reports E1, manage security policies E2]
+Moat penalty: -2
+
+VEEVA (VEEV) → normalized ≈ 38
+Life sciences cloud: pharma CRM with regulatory submission management,
+clinical data, deep ERP integration, validation requirements.
+Tasks: [manage pharma commercial content E1, track regulatory submissions E1,
+manage clinical trial data E2, maintain validated system documentation E1,
+integrate with lab systems E0, generate regulatory reports E1]
+Moat penalty: -2 (pharma regulatory certification)
+
+PAYCOM (PAYC) → normalized ≈ 45
+HCM/payroll SaaS: payroll calculation, compliance, benefits admin,
+talent management — text-heavy but deep compliance integration.
+Tasks: [process payroll with tax compliance E1, manage employee records E1,
+administer benefits enrollment E1, track time and attendance E2,
+generate compliance reports E1, integrate with GL systems E2]
+Moat penalty: -1
+
+HUBSPOT (HUBS) → normalized ≈ 64
+CRM/marketing platform: email campaigns, pipeline management, contact
+records, marketing automation — core is written communication.
+Tasks: [draft and send marketing emails E1, manage contact records E1,
+track sales pipeline E1, score and route leads E1, generate campaign
+reports E1, integrate with other systems E2]
+Moat penalty: -1
+
+LIVEPERSON (LPSN) → normalized ≈ 72
+Conversational AI platform: customer support via chat/messaging,
+intent classification, automated conversation routing.
+Tasks: [manage customer conversations via chat E1, classify customer
+intent E1, route conversations to agents E1, generate automated
+responses E1, analyze conversation transcripts E1, integrate with
+CRM systems E2]
+Moat penalty: 0
+
+EGAIN (EGAN) → normalized ≈ 80
+Knowledge management: knowledge base authoring, customer self-service
+answers, agent-assist content, guided workflows.
+Tasks: [author and maintain knowledge articles E1, answer customer queries
+from knowledge base E1, recommend relevant content to agents E1,
+generate guided resolution workflows E1, manage content versions E1]
+Moat penalty: 0
+
+ZIPRECRUITER (ZIP) → normalized ≈ 88
+Online job marketplace: job-candidate matching, resume screening,
+employer-candidate messaging, job distribution.
+Tasks: [match candidates to job listings E1, screen and rank resumes E1,
+facilitate employer-candidate messaging E1, distribute job listings E1,
+generate candidate recommendations E1, categorize job postings E1]
+Moat penalty: 0
+
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
+
+Return ONLY valid JSON. No text before or after the JSON object.
+
 {
   "ticker": "XXXX",
-  "C1": 5, "C2": 3, "C3": 7, "C4": 4, "C5": 6,
-  "C6": 8, "C7": 2, "C8": 3, "C9": 7, "C10": 6,
-  "reasoning": "One sentence summarizing the product and its replicability profile"
+  "customer_type": "B2B",
+  "tasks": [
+    {"task": "customer-facing task description", "exposure": "E1"},
+    {"task": "customer-facing task description", "exposure": "E0"},
+    {"task": "customer-facing task description", "exposure": "E2"}
+  ],
+  "e0_count": 2,
+  "e1_count": 3,
+  "e2_count": 1,
+  "n_tasks": 6,
+  "integration_depth_penalty": -1,
+  "raw_exposure": 0.583,
+  "adjusted_exposure": 0.483,
+  "normalized_score": 48.8,
+  "reasoning": "2-3 sentences describing what the product does, what determines its exposure profile, and why the integration depth penalty is what it is. Cite actual product tasks — do NOT cite author names."
 }
 
-## Score Calculation (performed by the pipeline, not by you)
-
-Raw = (C1×3 + C2×3 + C3×2 + C4×2 + C5×2) − (C6×3 + C7×3 + C8×2 + C9×2 + C10×2)
-Range: [−120, +120]
-Normalized = ((raw + 120) / 240) × 99 + 1 → [1, 100]
-
-Do not compute the final score. Only provide the ten criterion scores and reasoning.
+CRITICAL OUTPUT RULES:
+- n_tasks must equal e0_count + e1_count + e2_count
+- integration_depth_penalty must be 0, -1, or -2
+- normalized_score must be between 1 and 100
+- Cite product tasks in reasoning, not author names
+- If customer_type is B2C or Mixed, return null for score fields and empty tasks array

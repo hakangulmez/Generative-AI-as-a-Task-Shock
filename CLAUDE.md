@@ -12,22 +12,35 @@ This file tells Claude (or any AI assistant) exactly what this repository is and
 
 The thesis measures whether B2B software firms with higher **product-level LLM replicability** experienced worse revenue growth after the ChatGPT shock (2022Q4).
 
-**Core result:** β = −0.604, WCB p = 0.003*** (SME <$200M, Literature Rubric, n=94)
+**Current pipeline state:** Financial panel is built and clean. Next step is scoring firms with the Literature Rubric.
 
 ---
 
 ## Key Concepts (Understand Before Helping)
 
 ### The Treatment Variable
-`ρ_i^lit` — the **Literature Rubric score** ∈ [1, 100]. This is the PRIMARY treatment variable. It measures the fraction of a firm's product task bundle that an LLM can replicate at near-zero cost. Constructed pre-shock (10-K filings before 2022-11-01) using Claude Opus scoring a 10-criterion rubric.
+`ρ_i^lit` — the **Literature Rubric score** ∈ [1, 100]. This is the PRIMARY treatment variable. It measures the fraction of a firm's product task bundle that an LLM can replicate at near-zero cost. Constructed from pre-shock 10-K filings (before 2022-11-01) using the E0/E1/E2 task exposure framework.
 
-**Not to be confused with:**
-- `early_ai` / `agentic_ai` — these are the holistic LLM Judge scores (used as robustness check, NOT primary)
-- `replicability_score`, `contrast_score` — SBERT-based scores (robustness only)
-- O*NET similarity scores — additional robustness measure
+**Score formula:**
+```
+raw_exposure      = (E1_count + 0.5 × E2_count) / n_tasks
+adjusted_exposure = max(0.0, raw_exposure + integration_depth_penalty / 10)
+normalized_score  = round(adjusted_exposure × 99 + 1, 1)   ∈ [1, 100]
+```
+
+### The Task Exposure Framework
+Applied at the product level (one level up from Eloundou et al. 2024 who classify worker tasks):
+- **E1** — direct LLM exposure: text output, document processing, communication, structured queries
+- **E2** — LLM + standard tools: needs database/API access but output is language-based
+- **E0** — no meaningful LLM exposure: real-time data streams, hardware, sub-second latency, deep proprietary integration
+
+### Integration Depth Penalty
+- **0** — no moat, customers can switch easily
+- **−1** — moderate moat (embedded in workflows, 6–18 month switch)
+- **−2** — strong moat (the integration IS the product — core banking, EDA, pharma regulatory cloud)
 
 ### The Shock
-ChatGPT public release = November 30, 2022. `Post_t = 1` for 2022Q4 onward.
+ChatGPT public release = November 30, 2022. `Post_t = 1` for 2022Q4 onward (period_end ≥ 2022-10-01).
 
 ### The Estimating Equation
 ```
@@ -35,8 +48,31 @@ ln(Revenue_it) = α_i + δ_t + β · (Post_t × ρ_i^lit) + ε_it
 ```
 Two-way fixed effects DiD. Inference via wild cluster bootstrap (WCB), clustered at firm level.
 
-### The Mechanism
-**Quantity channel, not pricing channel.** Gross margin effects are insignificant (p > 0.4). Customers substitute away entirely rather than renegotiating prices. Confirmed by R&D intensity test: β = +0.080, p = 0.024 (affected firms increase defensive R&D).
+---
+
+## Current File Structure
+
+```
+scripts/
+  build_firm_universe.py      # DONE — do not re-run
+  collect_10k_text.py         # DONE — do not re-run
+  build_financial_panel.py    # DONE — clean panel, 223 firms
+  score_literature_rubric.py  # NEXT STEP — run with ANTHROPIC_API_KEY
+  build_master_panel.py       # After scoring completes
+
+analysis/
+  did_v3.R                    # Main DiD regressions (run after master panel)
+
+prompts/
+  literature_rubric_system.txt  # System prompt for scoring script
+
+data/raw/
+  firm_universe.csv           # 248 firms: ticker, CIK, SIC, exchange
+
+data/processed/
+  financial_panel.csv         # 223 firms, 5,493 obs — DO NOT OVERWRITE
+  extraction_qa.json          # 10-K extraction QA log
+```
 
 ---
 
@@ -49,8 +85,8 @@ Two-way fixed effects DiD. Inference via wild cluster bootstrap (WCB), clustered
 | Firm universe | `scripts/build_firm_universe.py` | SEC EDGAR SIC 7370-7379, companyfacts API |
 | 10-K extraction | `scripts/collect_10k_text.py` | SEC EDGAR only, no Wayback/product pages |
 | Financial panel | `scripts/build_financial_panel.py` | Quarterly revenue from companyfacts XBRL |
-| Scoring | `scripts/score_literature_rubric.py` | Literature rubric is primary (to be written) |
-| R regressions | `analysis/did_main.R`, `analysis/wcb_rubric.R` | |
+| Scoring | `scripts/score_literature_rubric.py` | Literature rubric is primary |
+| R regressions | `analysis/did_v3.R` | fixest + fwildclusterboot |
 | LaTeX manuscript | Overleaf only | `thesis.tex` is gitignored, NEVER commit it |
 
 ### Git Rules
@@ -63,77 +99,45 @@ Two-way fixed effects DiD. Inference via wild cluster bootstrap (WCB), clustered
 - **Cutoff:** Filing date < 2022-11-01 (pre-shock)
 - **Section:** Item 1 Business Description — extract in FULL, no truncation
 - **No fallbacks:** No Wayback Machine, no product pages, no company websites
-- The text thesis says "~3,000 characters" but this refers to the scoring input window, not the extraction limit. Extract the full Item 1.
 
 ### Scoring Rules
-- Primary score = **Literature Rubric** (`ρ_i^lit`), not LLM Judge holistic
-- Scoring model = Claude Opus (not Sonnet, not Haiku)
+- Primary score = **Literature Rubric** (`ρ_i^lit`), E0/E1/E2 framework
+- Scoring model = Claude Sonnet (claude-sonnet-4-6) — specified in score_literature_rubric.py
 - Score must be **pre-shock**: constructed from pre-2022Q4 filings only
 - Do not re-score with post-shock text
 
----
-
-## File Index
-
-```
-scripts/build_firm_universe.py      → SEC EDGAR firm universe (248 firms, SIC 7370-7379)
-scripts/collect_10k_text.py         → 10-K Item 1 + 1A extraction (239/248 firms)
-scripts/build_financial_panel.py    → Quarterly revenue panel from companyfacts (4,696 obs)
-scripts/score_literature_rubric.py  → PRIMARY scoring: Claude Opus literature rubric (to be written)
-
-analysis/did_main.R                 → Main DiD regressions (Tables 1–3)
-analysis/wcb_rubric.R               → Wild cluster bootstrap p-values
-
-notebooks/thesis_notebook.ipynb     → ALL figures (Fig 1–9), data QA, descriptives
-
-data/raw/firm_universe.csv          → 248 firms: ticker, CIK, SIC, exchange, pre_shock_quarters
-data/processed/financial_panel.csv  → Quarterly panel: revenue, gross_profit, rd_expense, sga_expense
-text_data/10k_extracts/             → Extracted 10-K texts (gitignored)
-literature_rubric.json              → 10-criterion rubric definition
-```
+### Financial Panel Rules
+- **IIIV is excluded** from the panel (post-privatization accounting restatements: FY2022 −40%, FY2023 −49% — data unreliable). Exclusion is hardcoded in `build_financial_panel.py`.
+- Q4 revenue = `Annual_FY − (Q1 + Q2 + Q3)`. Negative Q4 values are discarded (tag mismatch / amended filing artifact).
+- When multiple annual filings exist for a fiscal year, the **higher value is retained** (original filing preferred over post-restatement amendments).
+- **Do not run `build_financial_panel.py` without `--tickers` unless you intend to rebuild the full panel.** It overwrites `financial_panel.csv`.
 
 ---
 
-## Key Numbers (Do Not Change Without Good Reason)
+## Key Numbers
 
-| Parameter | Value | Why |
-|---|---|---|
-| Firms in universe | 248 | SIC 7370–7379, NYSE/Nasdaq, ≥6 pre-shock XBRL quarters |
-| Panel observations | 4,696 | Firm-quarter (2019Q1–2025Q4) |
-| 10-K extractions | 239/248 | 9 failures due to non-standard HTML |
-| Primary sample | TBD | SME <$200M pre-shock revenue (to be recomputed) |
-| Extended sample | TBD | SME <$500M (to be recomputed) |
-| Shock date | 2022Q4 (2022-11-30) | ChatGPT release |
-| Extraction cutoff | 2022-11-01 | Pre-shock |
-| Panel period | 2019Q1–2025Q4 | Up to 28 quarters |
-| Primary β | −0.604 | WCB p=0.003 (prior pipeline, to be recomputed) |
-| Construct validity r | 0.895 | LLM Judge vs Lit Rubric |
-| Three-period | TBD | Must use Literature Rubric (prior values used LLM Judge — incorrect) |
-
----
-
-## Robustness Table Structure (tab:robust)
-
-Four panels, do not restructure:
-- **Panel A:** Alternative samples (full scored, <$500M, >$200M excluded)
-- **Panel B:** Alternative treatment measures (LLM Judge, contrast score, O*NET)  
-- **Panel C:** Specification checks (no controls, time trends, quarterly FE)
-- **Panel D:** Placebo and falsification (pre-period, gross margin)
-
-R&D intensity sits exclusively in **Table 3** (Mechanism Outcomes), not in the robustness table.
+| Parameter | Value |
+|---|---|
+| Firms in universe | 248 |
+| Panel observations | 5,493 |
+| Firms in financial panel | 223 (after IIIV exclusion + data quality filters) |
+| 10-K extractions | 239/248 |
+| Shock date | 2022Q4 (2022-10-01 as period_end threshold) |
+| Extraction cutoff | 2022-11-01 (pre-shock) |
+| Panel period | 2019Q1–2025Q4 |
 
 ---
 
 ## Common Mistakes to Avoid
 
-1. **Don't use `early_ai` as primary treatment** — it's holistic LLM Judge, not the literature rubric
+1. **Don't overwrite `financial_panel.csv`** without `--tickers` flag — it has 5,493 rows and took time to build correctly
 2. **Don't truncate Item 1 extraction** — extract the full section
 3. **Don't commit `thesis.tex`** — Overleaf only
 4. **Don't put figure code in .py scripts** — everything in `thesis_notebook.ipynb`
 5. **Don't add Wayback/product page fallback** to extraction — SEC EDGAR only
 6. **Don't use post-2022Q4 10-K filings** for scoring — post-shock text is contaminated
-7. **Don't confuse quantity channel with pricing channel** — gross margin insignificance is the key result proving quantity channel
-8. **Don't use LLM Judge for three-period analysis** — three-period (Early/Advanced AI era) MUST use Literature Rubric scores, not holistic `early_ai`/`agentic_ai`
+7. **Don't re-add IIIV** — excluded intentionally due to accounting restatements
+8. **Don't use alternative scoring approaches as primary** — Literature Rubric (E0/E1/E2) is the primary treatment variable
 
 ---
 
@@ -142,7 +146,6 @@ R&D intensity sits exclusively in **Table 3** (Mechanism Outcomes), not in the r
 - Python: follow existing style in `scripts/`
 - R: use `fixest` for fixed effects, `fwildclusterboot` for WCB
 - Figures: add to `thesis_notebook.ipynb` with filename `fig{N}_{description}.png`
-- Naming: `fig1_` through `fig9_` are taken; new figures start at `fig10_`
 
 ---
 
@@ -152,4 +155,4 @@ R&D intensity sits exclusively in **Table 3** (Mechanism Outcomes), not in the r
 
 **Size heterogeneity mechanism:** Switching costs (Farrell & Klemperer 2007). Enterprise customers face prohibitively high switching costs (multi-year contracts, workflow dependencies, compliance), insulating large-vendor relationships. SME customers can substitute point solutions within a contract cycle, making them more price-responsive to LLM alternatives.
 
-**Entry barrier implication (for Discussion):** Post-shock, the entry barrier for competing with high-replicability software products has collapsed. Any developer with API access can replicate what previously required years of engineering. This creates a new competitive dynamic distinct from classical horizontal competition between software firms — substitution now comes from general-purpose AI that any entrepreneur can deploy.
+**Entry barrier implication (for Discussion):** Post-shock, the entry barrier for competing with high-replicability software products has collapsed. Any developer with API access can replicate what previously required years of engineering.
