@@ -1,29 +1,28 @@
 """
-01_build_firm_universe.py — Build PRIMARY and EXTENDED firm universes from SEC EDGAR.
+01_build_firm_universe.py — Build three-tier firm universe from SEC EDGAR.
 
-PRIMARY universe  : SIC 7370-7379, NYSE/NASDAQ/NYSE American, ≥6 pre-shock revenue quarters.
-EXTENDED universe : UNION of two discovery methods:
-  (a) Manual ticker list  — config/extended_universe_tickers.yaml (authoritative)
-  (b) Auto SIC→NAICS      — firms outside primary SIC range whose SIC maps to a target NAICS-4
-  Output column 'extended_source' ∈ {manual, auto, both} tracks provenance.
+TIER 1 — primary_software : SIC 7370-7379, NYSE/NASDAQ/NYSE American, ≥6 pre-shock quarters.
+TIER 2 — primary_knowledge: Manual ticker list (info services, publishing, education, consulting).
+TIER 3 — placebo          : Manual ticker list (pharma, energy, manufacturing, payments).
+                            Used as construct-validity / placebo test in H4.
 
-NAICS NOTE: SEC EDGAR has NO native NAICS field in any standard endpoint.
-  - company_tickers_exchange.json : ['cik', 'name', 'ticker', 'exchange'] only
-  - submissions JSON              : has 'sic' (SEC SIC code) but not NAICS
-  - companyfacts DEI              : no standard NAICS XBRL tag
-NAICS codes in the output are derived from the bundled Census Bureau SIC-to-NAICS-4
-crosswalk (_SIC_TO_NAICS4). The 'naics' column should be treated as approximate
-(4-digit NAICS prefix, not official firm-level classification).
+Output column 'tier' ∈ {primary_software, primary_knowledge, placebo, placebo_both}.
+  placebo_both: ticker is in placebo list AND has SIC 7370-7379 (unexpected — flagged).
+
+NAICS NOTE: Auto SIC→NAICS crosswalk for universe membership is intentionally DISABLED.
+  The crosswalk (SIC 7389 → NAICS 5191) pulls in 60+ payments/BPO/consumer firms that
+  are not knowledge-product firms. Manual tier 2/3 lists are authoritative.
+  The _SIC_TO_NAICS4 dict is retained only to populate the 'naics' output column.
 
 Usage:
   python3 scripts/01_build_firm_universe.py --dry-run
-  python3 scripts/01_build_firm_universe.py --primary-only
-  python3 scripts/01_build_firm_universe.py --universe-only primary
-  python3 scripts/01_build_firm_universe.py --universe-only extended
+  python3 scripts/01_build_firm_universe.py --tier primary_software
+  python3 scripts/01_build_firm_universe.py --tier primary_knowledge
+  python3 scripts/01_build_firm_universe.py --tier placebo
   python3 scripts/01_build_firm_universe.py
 
-DO NOT RUN THE FULL BUILD without explicit authorization — it fetches ~10k
-submissions + ~800 companyfacts from SEC EDGAR (~10 min even with caching).
+DO NOT RUN THE FULL BUILD without explicit authorization — it fetches submissions +
+companyfacts from SEC EDGAR. With warm cache: <2 min. Cold: ~60 min.
 """
 
 from __future__ import annotations
@@ -82,26 +81,20 @@ def _count_pre_shock_quarters(cf: dict, cutoff: str) -> int:
 # ---------------------------------------------------------------------------
 # Paths and constants
 # ---------------------------------------------------------------------------
-OUTPUT_CSV  = Path("data/raw/firm_universe.csv")
-BUILD_LOG   = Path("logs/universe_build.jsonl")
-SUMMARY_TXT = Path("data/raw/universe_build_summary.txt")
-CONFIG_PATH = Path("config/universe_filters.yaml")
-EXTENDED_TICKERS_PATH = Path("config/extended_universe_tickers.yaml")
+OUTPUT_CSV          = Path("data/raw/firm_universe.csv")
+BUILD_LOG           = Path("logs/universe_build.jsonl")
+SUMMARY_TXT         = Path("data/raw/universe_build_summary.txt")
+CONFIG_PATH         = Path("config/universe_filters.yaml")
+UNIVERSE_TICKERS_PATH = Path("config/universe_tickers.yaml")
 
-# Pre-shock cutoff: count revenue quarters with period_end strictly before this
 PRE_SHOCK_CUTOFF       = "2022-11-01"
 MIN_PRE_SHOCK_QUARTERS = 6
 
-# Exchange matching — normalize to uppercase for comparison
 VALID_EXCHANGES = frozenset({"NYSE", "NASDAQ", "NYSE AMERICAN", "NYSE MKT"})
-
-ANNUAL_FORMS = frozenset({"10-K", "10-K/A", "10-K405"})
-
-# IIIV: hardcoded exclusion (post-privatization accounting restatements)
+ANNUAL_FORMS    = frozenset({"10-K", "10-K/A", "10-K405"})
 EXCLUDED_TICKERS = frozenset({"IIIV"})
 
 # Legacy consumer-name heuristic — lowercase substring match on company_name
-# Preserved exactly from build_firm_universe.py
 CONSUMER_NAME_HINTS: list[str] = [
     "match group", "bumble", "spotify", "dropbox", "grubhub",
     "shutterstock", "yelp", "zillow", "trivago", "cargurus",
@@ -112,52 +105,30 @@ CONSUMER_NAME_HINTS: list[str] = [
     "inspired entertainment",
 ]
 
-# Dry-run tickers (as specified in master prompt)
-DRY_RUN_TICKERS = ["ZS", "VEEV", "DDOG", "ZIP", "HUBS"]
+DRY_RUN_TICKERS = ["ZS", "VEEV", "DDOG", "MCO", "PFE"]
 
 # ---------------------------------------------------------------------------
-# Census SIC-to-NAICS crosswalk (bundled — EDGAR has no native NAICS)
-# Source: Census Bureau 2022 SIC-to-NAICS concordance tables.
-# Key: SIC int, Value: 4-digit NAICS prefix string.
+# Census SIC-to-NAICS crosswalk — used ONLY to populate the 'naics' output
+# column. NOT used to determine universe membership (auto SIC→NAICS discovery
+# is intentionally disabled — see module docstring).
 # ---------------------------------------------------------------------------
-_NAICS_TO_SIC: dict[str, set[int]] = {
-    # Software Publishers
-    "5112": {7372},
-    # Computer Systems Design and Related Services
-    "5415": {7371, 7372, 7373, 7374, 7376, 7377, 7378, 7379},
-    # Data Processing, Hosting, Related Services
-    "5182": {7374},
-    # Other Information Services (internet publishing, web portals)
-    "5191": {7375, 7379, 7389},
-    # Newspaper, Book, and Directory Publishers
-    "5111": {2711, 2712, 2721, 2731, 2741},
-    # Colleges, Universities, and Professional Schools
-    "6113": {8220, 8221},
-    # Business and Secretarial/Vocational Schools
-    "6114": {8200, 8244, 8249, 8299},
-    # Management, Scientific, and Technical Consulting
-    "5416": {8742, 8748},
-    # Other Financial Activities / Financial Data Services
-    "5239": {6199, 6282, 6411, 6159},
+_SIC_TO_NAICS4: dict[int, str] = {
+    # Primary software SIC range
+    7370: "5415", 7371: "5415", 7372: "5112", 7373: "5415",
+    7374: "5182", 7375: "5191", 7376: "5415", 7377: "5415",
+    7378: "5415", 7379: "5191",
+    # Publishing
+    2711: "5111", 2712: "5111", 2721: "5111", 2731: "5111", 2741: "5111",
+    # Education
+    8200: "6114", 8220: "6113", 8221: "6113",
+    8244: "6114", 8249: "6114", 8299: "6114",
+    # Consulting
+    8742: "5416", 8748: "5416",
+    # Financial data / info services
+    6199: "5239", 6282: "5239", 6411: "5239", 6159: "5239",
+    # Other
+    7389: "5191",
 }
-
-# Reverse: SIC → NAICS-4 (first entry in _NAICS_TO_SIC order wins on collision)
-_SIC_TO_NAICS4: dict[int, str] = {}
-for _naics4, _sics in _NAICS_TO_SIC.items():
-    for _sic in _sics:
-        _SIC_TO_NAICS4.setdefault(_sic, _naics4)
-
-# Also assign NAICS to primary SIC range (7370-7379) that aren't already covered
-_SIC_TO_NAICS4.setdefault(7370, "5415")
-_SIC_TO_NAICS4.setdefault(7371, "5415")
-_SIC_TO_NAICS4.setdefault(7372, "5112")
-_SIC_TO_NAICS4.setdefault(7373, "5415")
-_SIC_TO_NAICS4.setdefault(7374, "5182")
-_SIC_TO_NAICS4.setdefault(7375, "5191")
-_SIC_TO_NAICS4.setdefault(7376, "5415")
-_SIC_TO_NAICS4.setdefault(7377, "5415")
-_SIC_TO_NAICS4.setdefault(7378, "5415")
-_SIC_TO_NAICS4.setdefault(7379, "5191")
 
 
 # ---------------------------------------------------------------------------
@@ -169,86 +140,93 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
-def load_manual_extended_tickers() -> dict[str, dict]:
+def load_universe_tickers() -> dict[str, dict]:
     """
-    Load config/extended_universe_tickers.yaml.
+    Load config/universe_tickers.yaml.
 
-    Returns dict: ticker (uppercase) → {naics: str, company: str}.
+    Returns dict: ticker (uppercase) → {tier: str, sector: str,
+                                         company: str, expected_rho: int|None}
+    Tiers present: primary_knowledge, placebo.
     """
-    with open(EXTENDED_TICKERS_PATH) as f:
+    with open(UNIVERSE_TICKERS_PATH) as f:
         raw = yaml.safe_load(f)
+
     result: dict[str, dict] = {}
-    for entry in raw.get("knowledge_product_tickers", []):
+
+    for entry in raw.get("primary_knowledge_tickers", []):
         ticker = str(entry["ticker"]).upper()
         result[ticker] = {
-            "naics":   str(entry["naics"])[:4],
-            "company": entry.get("company", ""),
+            "tier":         "primary_knowledge",
+            "sector":       str(entry.get("sector", "")),
+            "company":      entry.get("company", ""),
+            "expected_rho": entry.get("expected_rho"),
         }
+
+    for entry in raw.get("placebo_tickers", []):
+        ticker = str(entry["ticker"]).upper()
+        result[ticker] = {
+            "tier":         "placebo",
+            "sector":       str(entry.get("sector", "")),
+            "company":      entry.get("company", ""),
+            "expected_rho": entry.get("expected_rho"),
+        }
+
     return result
 
 
 # ---------------------------------------------------------------------------
-# Phase A/B: Identify candidates from EDGAR
+# Phase A/B helpers
 # ---------------------------------------------------------------------------
 
 def get_all_listed_ciks() -> list[dict]:
-    """
-    Return all CIKs from SEC's company_tickers_exchange.json.
-    Fields: cik, name, ticker, exchange (no SIC, no NAICS).
-    """
+    """Return all CIKs from SEC's company_tickers_exchange.json."""
     raw = get_company_tickers()
-    fields = raw["fields"]
-    cik_idx      = fields.index("cik")
-    name_idx     = fields.index("name")
-    ticker_idx   = fields.index("ticker")
-    exchange_idx = fields.index("exchange")
+    fields    = raw["fields"]
+    cik_idx   = fields.index("cik")
+    name_idx  = fields.index("name")
+    tick_idx  = fields.index("ticker")
+    exch_idx  = fields.index("exchange")
 
-    seen_ciks: set[int] = set()
+    seen: set[int] = set()
     firms = []
     for row in raw["data"]:
         cik = int(row[cik_idx])
-        if cik in seen_ciks:
+        if cik in seen:
             continue
-        seen_ciks.add(cik)
+        seen.add(cik)
         firms.append({
             "cik":      cik,
             "name":     row[name_idx],
-            "ticker":   str(row[ticker_idx]),
-            "exchange": str(row[exchange_idx]),
+            "ticker":   str(row[tick_idx]),
+            "exchange": str(row[exch_idx]),
         })
     return firms
 
 
 def enrich_from_submissions(cik: int) -> Optional[dict]:
     """
-    Fetch submissions JSON for a CIK and extract metadata.
-
-    Returns dict with: sic (int), company_name (str), tickers (list[str]),
-    exchanges (list[str]), first_10k_date (str|None), last_10k_date (str|None),
-    has_annual_10k (bool, True if any 10-K/10-K/A filing exists).
-    Returns None on fetch failure.
+    Fetch submissions JSON; return metadata dict or None on failure.
+    Fields: sic, company_name, tickers, exchanges, first_10k_date,
+            last_10k_date, has_annual_10k.
     """
     try:
         data = get_submissions(cik)
     except RuntimeError:
         return None
 
-    sic_raw = data.get("sic", "")
-    sic = int(sic_raw) if str(sic_raw).isdigit() else None
+    sic_raw      = data.get("sic", "")
+    sic          = int(sic_raw) if str(sic_raw).isdigit() else None
     company_name = data.get("name", "")
-    tickers   = data.get("tickers", [])
-    exchanges = data.get("exchanges", [])
+    tickers      = data.get("tickers", [])
+    exchanges    = data.get("exchanges", [])
 
-    filings = data.get("filings", {}).get("recent", {})
+    filings      = data.get("filings", {}).get("recent", {})
     forms        = filings.get("form", [])
     filing_dates = filings.get("filingDate", [])
 
-    ten_k_dates = [
-        d for f, d in zip(forms, filing_dates)
-        if f in ANNUAL_FORMS
-    ]
-    first_10k = min(ten_k_dates) if ten_k_dates else None
-    last_10k  = max(ten_k_dates) if ten_k_dates else None
+    ten_k_dates = [d for f, d in zip(forms, filing_dates) if f in ANNUAL_FORMS]
+    first_10k   = min(ten_k_dates) if ten_k_dates else None
+    last_10k    = max(ten_k_dates) if ten_k_dates else None
 
     return {
         "sic":            sic,
@@ -268,37 +246,30 @@ def enrich_from_submissions(cik: int) -> Optional[dict]:
 def apply_filters(
     candidates: list[dict],
     *,
-    target_naics_codes: set[str],
     primary_sic_range: set[int],
-    manual_extended: dict[str, dict],
-    extended_only: bool = False,
-    primary_only: bool = False,
+    manual_tickers: dict[str, dict],
+    tier_filter: Optional[str] = None,
 ) -> pd.DataFrame:
     """
-    For each candidate firm, apply exchange, quarter, and exclusion filters.
-    Assigns universe label: 'primary', 'extended', or 'both'.
-    For extended firms, assigns extended_source: 'manual', 'auto', or 'both'.
+    Apply exchange, exclusion, and pre-shock quarter filters.
 
-    Extended universe is the UNION of:
-      (a) manual_extended   — tickers in config/extended_universe_tickers.yaml
-      (b) auto SIC→NAICS    — firms whose SIC maps to a target NAICS and are
-                              outside the primary SIC range
+    Tier assignment (priority order, non-overlapping except placebo_both):
+      1. primary_software : SIC in primary_sic_range
+         (if also in placebo list → placebo_both)
+      2. primary_knowledge: ticker in manual_tickers with tier=primary_knowledge
+         and NOT in primary_sic_range
+      3. placebo          : ticker in manual_tickers with tier=placebo
+         and NOT in primary_sic_range
 
-    Quarter counting logic:
-      - Fetch companyfacts for each candidate
-      - Run extract_quarterly_revenue (from utils.xbrl)
-      - Count observations with period_end strictly < PRE_SHOCK_CUTOFF ("2022-11-01")
-      - Firm passes if count >= MIN_PRE_SHOCK_QUARTERS (6)
+    Filters applied to ALL tiers:
+      - Ticker not in EXCLUDED_TICKERS
+      - exchange.upper() in VALID_EXCHANGES
+      - n_pre_shock_quarters >= MIN_PRE_SHOCK_QUARTERS
+      - For primary_knowledge and placebo: has_annual_10k=True (10-K filers only)
 
-    Exchange filter:
-      - Normalize exchange string to uppercase
-      - Must be in VALID_EXCHANGES
-
-    Extended-universe additional filter:
-      - Must have at least one 10-K filing (has_annual_10k=True)
-      - Excludes 20-F and 40-F filers (non-US domicile annual reports)
+    Auto SIC→NAICS crosswalk is intentionally NOT used for tier membership.
     """
-    rows = []
+    rows  = []
     total = len(candidates)
 
     for i, c in enumerate(candidates, 1):
@@ -314,33 +285,39 @@ def apply_filters(
         if (i % 100) == 0:
             logger.info("[%d/%d] filtering…", i, total)
 
-        # --- Determine universe membership ---
-        in_primary = (sic is not None) and (sic in primary_sic_range)
-        naics4     = _SIC_TO_NAICS4.get(sic, "") if sic else ""
+        # --- Tier determination ---
+        in_software = (sic is not None) and (sic in primary_sic_range)
+        manual_info = manual_tickers.get(ticker)
+        in_knowledge = (manual_info is not None) and (manual_info["tier"] == "primary_knowledge")
+        in_placebo   = (manual_info is not None) and (manual_info["tier"] == "placebo")
 
-        in_auto_extended   = (naics4 in target_naics_codes) and (not in_primary)
-        in_manual_extended = ticker in manual_extended
-        in_extended = in_auto_extended or in_manual_extended
+        if in_software and in_placebo:
+            tier = "placebo_both"
+        elif in_software:
+            tier = "primary_software"
+        elif in_knowledge:
+            tier = "primary_knowledge"
+        elif in_placebo:
+            tier = "placebo"
+        else:
+            continue  # not in any tier
 
-        if primary_only and not in_primary:
-            continue
-        if extended_only and not in_extended:
-            continue
-        if not in_primary and not in_extended:
-            continue
+        # --- Optional tier filter (--tier flag) ---
+        if tier_filter and tier != tier_filter:
+            if not (tier_filter == "primary_software" and tier == "placebo_both"):
+                continue
 
-        # --- IIIV exclusion ---
+        # --- Exclusions ---
         if ticker in EXCLUDED_TICKERS:
-            logger.info("  %s: excluded (IIIV hardcoded)", ticker)
+            logger.info("  %s: excluded (hardcoded)", ticker)
             continue
 
         # --- Exchange filter ---
-        exchange_norm = exchange_raw.upper()
-        if exchange_norm not in VALID_EXCHANGES:
+        if exchange_raw.upper() not in VALID_EXCHANGES:
             continue
 
-        # --- Extended: must be 10-K filer (no 20-F / 40-F) ---
-        if in_extended and not in_primary and not has_10k:
+        # --- 10-K filer requirement for manual tiers ---
+        if tier in ("primary_knowledge", "placebo") and not has_10k:
             continue
 
         # --- Pre-shock quarter count ---
@@ -352,34 +329,22 @@ def apply_filters(
 
         n_pre_shock = _count_pre_shock_quarters(cf, PRE_SHOCK_CUTOFF)
         if n_pre_shock < MIN_PRE_SHOCK_QUARTERS:
+            logger.info("  %s: only %d pre-shock quarters (< %d), skipped",
+                        ticker, n_pre_shock, MIN_PRE_SHOCK_QUARTERS)
             continue
 
-        # --- consumer_flag ---
+        # --- Consumer flag ---
         name_lower    = company_name.lower()
         consumer_flag = any(hint in name_lower for hint in CONSUMER_NAME_HINTS)
 
-        # --- universe label ---
-        if in_primary and in_extended:
-            universe = "both"
-        elif in_primary:
-            universe = "primary"
-        else:
-            universe = "extended"
+        # --- NAICS (informational only) ---
+        naics4 = _SIC_TO_NAICS4.get(sic, "") if sic else ""
+        if not naics4 and manual_info:
+            naics4 = str(manual_info.get("sector", ""))[:4]
 
-        # --- extended_source (only meaningful for extended firms) ---
-        if universe in ("extended", "both"):
-            if in_auto_extended and in_manual_extended:
-                extended_source = "both"
-            elif in_manual_extended:
-                extended_source = "manual"
-            else:
-                extended_source = "auto"
-        else:
-            extended_source = ""
-
-        # --- NAICS: prefer manual config value for extended firms ---
-        if in_manual_extended and naics4 == "":
-            naics4 = manual_extended[ticker]["naics"]
+        # --- Sector and expected_rho from manual config ---
+        sector_code  = manual_info["sector"]       if manual_info else ""
+        expected_rho = manual_info["expected_rho"] if manual_info else None
 
         rows.append({
             "ticker":               ticker,
@@ -388,8 +353,9 @@ def apply_filters(
             "sic":                  sic,
             "naics":                naics4,
             "exchange":             exchange_raw,
-            "universe":             universe,
-            "extended_source":      extended_source,
+            "tier":                 tier,
+            "sector_code":          sector_code,
+            "expected_rho":         expected_rho,
             "first_10k_date":       first_10k,
             "last_10k_date":        last_10k,
             "n_pre_shock_quarters": n_pre_shock,
@@ -413,52 +379,50 @@ def write_outputs(df: pd.DataFrame, log_entries: list[dict], *, dry_run: bool) -
     df.to_csv(OUTPUT_CSV, index=False)
     logger.info("Wrote %d firms → %s", len(df), OUTPUT_CSV)
 
-    n_primary  = (df["universe"].isin({"primary", "both"})).sum()
-    n_extended = (df["universe"].isin({"extended", "both"})).sum()
-    n_both     = (df["universe"] == "both").sum()
-    n_consumer = df["consumer_flag"].sum()
-
-    # Extended source breakdown
-    ext_df = df[df["universe"].isin({"extended", "both"})]
-    n_manual = (ext_df["extended_source"].isin({"manual", "both"})).sum()
-    n_auto   = (ext_df["extended_source"].isin({"auto",   "both"})).sum()
-    n_ext_both = (ext_df["extended_source"] == "both").sum()
+    tier_counts = df["tier"].value_counts().to_dict()
+    n_consumer  = df["consumer_flag"].sum()
 
     lines = [
         "=" * 60,
         "FIRM UNIVERSE BUILD SUMMARY",
         f"Generated: {datetime.now().isoformat()}",
         "=" * 60,
-        f"Total passing firms:   {len(df)}",
-        f"  Primary (SIC 7370-7379): {n_primary}",
-        f"  Extended (total):        {n_extended}",
-        f"    of which manual-only:  {n_manual - n_ext_both}",
-        f"    of which auto-only:    {n_auto - n_ext_both}",
-        f"    of which both:         {n_ext_both}",
-        f"  In both universes:       {n_both}",
-        f"  Consumer-flagged:        {n_consumer}",
+        f"Total firms: {len(df)}",
         "",
-        "Pre-shock quarter distribution (primary):",
+        "By tier:",
     ]
-    prim = df[df["universe"].isin({"primary", "both"})]["n_pre_shock_quarters"]
+    for tier in ("primary_software", "primary_knowledge", "placebo", "placebo_both"):
+        n = tier_counts.get(tier, 0)
+        if n:
+            lines.append(f"  {tier:22s}: {n}")
+    lines += [
+        f"  consumer_flagged       : {n_consumer}",
+        "",
+        "Primary software pre-shock quarter distribution:",
+    ]
+    prim = df[df["tier"] == "primary_software"]["n_pre_shock_quarters"]
     if len(prim):
         lines += [
             f"  Mean: {prim.mean():.1f}",
             f"  Min:  {prim.min()}",
             f"  Max:  {prim.max()}",
         ]
-    lines += ["", "SIC breakdown (primary):"]
-    prim_df = df[df["universe"].isin({"primary", "both"})]
+
+    if "sector_code" in df.columns:
+        lines += ["", "Knowledge tier by sector:"]
+        know = df[df["tier"] == "primary_knowledge"]
+        for sec, grp in know.groupby("sector_code"):
+            lines.append(f"  {sec:15s}: {len(grp):3d}  {', '.join(sorted(grp['ticker']))}")
+
+        lines += ["", "Placebo tier by sector:"]
+        plac = df[df["tier"] == "placebo"]
+        for sec, grp in plac.groupby("sector_code"):
+            lines.append(f"  {sec:15s}: {len(grp):3d}  {', '.join(sorted(grp['ticker']))}")
+
+    lines += ["", "Primary software SIC breakdown:"]
+    prim_df = df[df["tier"].isin({"primary_software", "placebo_both"})]
     for sic, cnt in prim_df["sic"].value_counts().sort_index().items():
         lines.append(f"  SIC {sic}: {cnt}")
-
-    if len(ext_df):
-        lines += ["", "Extended firms (manual list):"]
-        manual_firms = ext_df[ext_df["extended_source"].isin({"manual", "both"})][
-            ["ticker", "naics", "extended_source"]
-        ].sort_values("ticker")
-        for _, row in manual_firms.iterrows():
-            lines.append(f"  {row['ticker']:8s}  NAICS {row['naics']}  [{row['extended_source']}]")
 
     summary = "\n".join(lines)
     SUMMARY_TXT.parent.mkdir(parents=True, exist_ok=True)
@@ -478,84 +442,76 @@ def write_outputs(df: pd.DataFrame, log_entries: list[dict], *, dry_run: bool) -
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build primary and extended firm universes from SEC EDGAR"
+        description="Build three-tier firm universe from SEC EDGAR"
     )
     parser.add_argument("--dry-run", action="store_true",
                         help="Test on 5 known tickers; do not write output files")
-    parser.add_argument("--primary-only", action="store_true",
-                        help="Build primary SIC universe only (faster)")
-    parser.add_argument("--universe-only", choices=["primary", "extended"],
-                        help="Build a single universe")
+    parser.add_argument("--tier", choices=["primary_software", "primary_knowledge", "placebo"],
+                        help="Build a single tier only")
     args = parser.parse_args()
 
-    primary_only  = args.primary_only or (args.universe_only == "primary")
-    extended_only = (args.universe_only == "extended")
-
     cfg            = load_config()
-    manual_extended = load_manual_extended_tickers()
-    logger.info("Loaded %d manual extended tickers from config", len(manual_extended))
+    manual_tickers = load_universe_tickers()
+    logger.info("Loaded %d manual tickers (%d knowledge, %d placebo)",
+                len(manual_tickers),
+                sum(1 for v in manual_tickers.values() if v["tier"] == "primary_knowledge"),
+                sum(1 for v in manual_tickers.values() if v["tier"] == "placebo"))
 
-    primary_sic_range = set(cfg["primary"]["sic_codes"])
-    target_naics_raw  = [str(n) for n in cfg["extended"]["naics_codes"]]
-    target_naics4     = {n[:4] for n in target_naics_raw}
+    primary_sic_range = set(cfg["tiers"]["primary_software"]["sic_codes"])
 
     log_entries: list[dict] = [
         {"ts": datetime.utcnow().isoformat(), "event": "start",
-         "primary_only": primary_only, "extended_only": extended_only,
-         "dry_run": args.dry_run,
-         "manual_extended_count": len(manual_extended)}
+         "tier_filter": args.tier, "dry_run": args.dry_run,
+         "manual_ticker_count": len(manual_tickers)}
     ]
 
     if args.dry_run:
-        # Dry-run: test 5 known tickers (primary) + a sample of manual extended tickers
-        dry_extended_sample = ["MCO", "CHGG", "COUR", "ACN", "NYT"]
-        dry_tickers_all = set(DRY_RUN_TICKERS) | set(dry_extended_sample)
-        logger.info("DRY RUN: fetching %d tickers (%s)",
-                    len(dry_tickers_all), sorted(dry_tickers_all))
+        dry_tickers_all = set(DRY_RUN_TICKERS)
+        # Also include any manual tickers in dry-run set
+        dry_tickers_all |= set(list(manual_tickers.keys())[:5])
+        logger.info("DRY RUN: %d tickers: %s", len(dry_tickers_all), sorted(dry_tickers_all))
 
         tickers_json = get_company_tickers()
         fields     = tickers_json["fields"]
         ticker_idx = fields.index("ticker")
         cik_idx    = fields.index("cik")
         exch_idx   = fields.index("exchange")
-        name_idx   = fields.index("name")
 
         candidates = []
-        found_tickers: set[str] = set()
+        found: set[str] = set()
         for row in tickers_json["data"]:
             t = str(row[ticker_idx]).upper()
-            if t in dry_tickers_all and t not in found_tickers:
-                found_tickers.add(t)
+            if t in dry_tickers_all and t not in found:
+                found.add(t)
                 cik = int(row[cik_idx])
                 enriched = enrich_from_submissions(cik)
                 if enriched is None:
                     continue
                 candidates.append({
-                    "cik":     cik,
-                    "ticker":  t,
+                    "cik":      cik,
+                    "ticker":   t,
                     "exchange": str(row[exch_idx]),
                     **enriched,
                 })
-        logger.info("Fetched enriched data for %d dry-run tickers", len(candidates))
+        logger.info("Fetched data for %d dry-run tickers", len(candidates))
 
     else:
         logger.info("Phase A: downloading company_tickers_exchange.json …")
         listed = get_all_listed_ciks()
-        logger.info("  %d unique CIKs in company_tickers_exchange.json", len(listed))
+        logger.info("  %d unique CIKs", len(listed))
 
-        # Build a ticker→CIK lookup for manual extended tickers not in SIC range
-        ticker_to_cik_map: dict[str, int] = {
-            str(r["ticker"]).upper(): int(r["cik"])
-            for r in listed
+        # Build ticker→row lookup for manual tickers
+        ticker_to_row: dict[str, dict] = {
+            str(r["ticker"]).upper(): r for r in listed
         }
 
-        logger.info("Phase B: fetching submissions for SIC candidates + manual extended …")
+        logger.info("Phase B: fetching submissions …")
         candidates = []
         seen_ciks: set[int] = set()
 
         for j, firm in enumerate(listed, 1):
             if j % 500 == 0:
-                logger.info("  Submissions fetched: %d / %d  candidates so far: %d",
+                logger.info("  %d / %d scanned  candidates so far: %d",
                             j, len(listed), len(candidates))
             cik = firm["cik"]
             if cik in seen_ciks:
@@ -565,19 +521,21 @@ def main() -> None:
             if enriched is None:
                 continue
 
-            sic    = enriched["sic"]
-            naics4 = _SIC_TO_NAICS4.get(sic, "") if sic else ""
+            sic       = enriched["sic"]
+            ticker_up = str(firm["ticker"]).upper()
 
-            in_primary    = sic is not None and sic in primary_sic_range
-            in_auto_ext   = (naics4 in target_naics4) and not in_primary
-            ticker_upper  = str(firm["ticker"]).upper()
-            in_manual_ext = ticker_upper in manual_extended
+            in_software  = sic is not None and sic in primary_sic_range
+            in_manual    = ticker_up in manual_tickers
 
-            if primary_only and not in_primary:
+            # Tier filter short-circuit
+            if args.tier == "primary_software" and not in_software:
                 continue
-            if extended_only and not (in_auto_ext or in_manual_ext):
-                continue
-            if not in_primary and not in_auto_ext and not in_manual_ext:
+            if args.tier in ("primary_knowledge", "placebo"):
+                if not in_manual:
+                    continue
+                if manual_tickers[ticker_up]["tier"] != args.tier:
+                    continue
+            if not in_software and not in_manual:
                 continue
 
             seen_ciks.add(cik)
@@ -586,74 +544,49 @@ def main() -> None:
 
             candidates.append({
                 "cik":      cik,
-                "ticker":   ticker,
-                "exchange": exchange,
+                "ticker":   ticker_up,
+                "exchange": exchange or "",
                 **enriched,
             })
 
-        # Add any manual extended tickers not yet seen (e.g. listed under different SIC)
-        if not primary_only:
-            for mticker, minfo in manual_extended.items():
-                cik = ticker_to_cik_map.get(mticker)
-                if cik is None or cik in seen_ciks:
+        # Ensure all manual tickers are in candidates even if not in SIC scan
+        if args.tier != "primary_software":
+            for mticker in manual_tickers:
+                row = ticker_to_row.get(mticker)
+                if row is None or int(row["cik"]) in seen_ciks:
                     continue
+                cik = int(row["cik"])
                 enriched = enrich_from_submissions(cik)
                 if enriched is None:
                     continue
                 seen_ciks.add(cik)
-                exchange = (enriched["exchanges"] or ["UNKNOWN"])[0]
+                exchange = (enriched["exchanges"] or [row["exchange"]])[0]
                 candidates.append({
                     "cik":      cik,
                     "ticker":   mticker,
-                    "exchange": exchange,
+                    "exchange": exchange or "",
                     **enriched,
                 })
-                logger.info("  Added manual extended ticker not in SIC scan: %s", mticker)
+                logger.info("  Added manual ticker outside SIC scan: %s", mticker)
 
         logger.info("  %d candidates after submissions filter", len(candidates))
         log_entries.append({"ts": datetime.utcnow().isoformat(),
                             "event": "candidates_after_submissions",
                             "n": len(candidates)})
 
-    logger.info("Phase C: applying filters (exchange + pre-shock quarters) …")
+    logger.info("Phase C: applying filters …")
     df = apply_filters(
         candidates,
-        target_naics_codes=target_naics4,
         primary_sic_range=primary_sic_range,
-        manual_extended=manual_extended,
-        extended_only=extended_only,
-        primary_only=primary_only,
+        manual_tickers=manual_tickers,
+        tier_filter=args.tier,
     )
 
     log_entries.append({"ts": datetime.utcnow().isoformat(),
                         "event": "after_filters", "n": len(df)})
 
-    n_primary  = int((df["universe"].isin({"primary", "both"})).sum())
-    n_extended = int((df["universe"].isin({"extended", "both"})).sum())
-    logger.info("Passing firms: %d total  (%d primary, %d extended)",
-                len(df), n_primary, n_extended)
-
-    # Sanity check: primary should reproduce legacy firms
-    if not args.dry_run and not extended_only:
-        legacy_path = Path("data/raw/firm_universe.csv")
-        if legacy_path.exists():
-            legacy_df = pd.read_csv(legacy_path)
-            if "meets_filters" in legacy_df.columns:
-                legacy_passing = set(legacy_df[legacy_df["meets_filters"] == True]["ticker"])
-            else:
-                legacy_passing = set(legacy_df["ticker"])
-            new_primary = set(df[df["universe"].isin({"primary", "both"})]["ticker"])
-            only_in_legacy = legacy_passing - new_primary
-            only_in_new    = new_primary - legacy_passing
-            if only_in_legacy or only_in_new:
-                logger.warning("Primary universe diff vs legacy CSV:")
-                logger.warning("  Only in legacy (%d): %s",
-                               len(only_in_legacy), sorted(only_in_legacy)[:20])
-                logger.warning("  Only in new    (%d): %s",
-                               len(only_in_new),    sorted(only_in_new)[:20])
-            else:
-                logger.info("Primary universe matches legacy CSV exactly (%d firms)",
-                            len(new_primary))
+    for tier, grp in df.groupby("tier"):
+        logger.info("  %s: %d firms", tier, len(grp))
 
     logger.info("Phase D: writing outputs …")
     write_outputs(df, log_entries, dry_run=args.dry_run)

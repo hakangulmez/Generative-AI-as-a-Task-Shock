@@ -1,0 +1,122 @@
+# Three-tier firm universe for cross-sectoral LLM substitution study.
+#
+# primary_software tier is built from SIC 7370-7379 filter — not listed here.
+# This file defines primary_knowledge and placebo tiers via manual curation.
+#
+# Schema: {ticker, sector, expected_rho, company}
+# - expected_rho: used as calibration reference in Phase 6 validation matrix
+# - sector: categorical label for heterogeneity analysis
+
+primary_knowledge_tickers:
+
+  # ============================================================
+  # Information services (NAICS 5191) — data moats, analytical outputs
+  # Expected rho range: [30, 50] — strong regulatory / data moats dampen replicability
+  # ============================================================
+  - {ticker: MCO,  sector: info_svc, expected_rho: 30, company: "Moody's Corporation"}
+  - {ticker: SPGI, sector: info_svc, expected_rho: 35, company: "S&P Global"}
+  - {ticker: MSCI, sector: info_svc, expected_rho: 40, company: "MSCI Inc"}
+  - {ticker: FDS,  sector: info_svc, expected_rho: 45, company: "FactSet Research Systems"}
+  - {ticker: VRSK, sector: info_svc, expected_rho: 35, company: "Verisk Analytics"}
+  - {ticker: MORN, sector: info_svc, expected_rho: 45, company: "Morningstar"}
+  - {ticker: EFX,  sector: info_svc, expected_rho: 30, company: "Equifax"}
+  - {ticker: TRU,  sector: info_svc, expected_rho: 30, company: "TransUnion"}
+  - {ticker: FICO, sector: info_svc, expected_rho: 40, company: "Fair Isaac"}
+  - {ticker: CSGP, sector: info_svc, expected_rho: 40, company: "CoStar Group"}
+  - {ticker: BR,   sector: info_svc, expected_rho: 40, company: "Broadridge Financial Solutions"}
+  - {ticker: FIS,  sector: info_svc, expected_rho: 35, company: "Fidelity National Info Services"}
+
+  # ============================================================
+  # Publishing (NAICS 5111) — content creation directly exposed
+  # Expected rho range: [55, 75] — text output is the core product
+  # ============================================================
+  - {ticker: NWSA, sector: publishing, expected_rho: 65, company: "News Corp"}
+  - {ticker: NYT,  sector: publishing, expected_rho: 70, company: "New York Times"}
+  - {ticker: DJCO, sector: publishing, expected_rho: 75, company: "Daily Journal"}
+  - {ticker: GHC,  sector: publishing, expected_rho: 55, company: "Graham Holdings"}
+
+  # ============================================================
+  # Education (NAICS 6113/6114) — content delivery and tutoring
+  # Expected rho range: [35, 80] — wide spread (tutoring high, accredited programs lower)
+  # ============================================================
+  - {ticker: CHGG, sector: education, expected_rho: 75, company: "Chegg"}
+  - {ticker: COUR, sector: education, expected_rho: 60, company: "Coursera"}
+  - {ticker: STRA, sector: education, expected_rho: 55, company: "Strategic Education"}
+  - {ticker: LRN,  sector: education, expected_rho: 55, company: "Stride"}
+  - {ticker: LOPE, sector: education, expected_rho: 50, company: "Grand Canyon Education"}
+  - {ticker: APEI, sector: education, expected_rho: 50, company: "American Public Education"}
+  - {ticker: LAUR, sector: education, expected_rho: 50, company: "Laureate Education"}
+  - {ticker: PRDO, sector: education, expected_rho: 50, company: "Perdoceo Education"}
+  - {ticker: UTI,  sector: education, expected_rho: 35, company: "Universal Technical Institute"}
+  - {ticker: NRDY, sector: education, expected_rho: 80, company: "Nerdy Inc"}
+  - {ticker: UDMY, sector: education, expected_rho: 70, company: "Udemy"}
+  - {ticker: LINC, sector: education, expected_rho: 35, company: "Lincoln Educational Services"}
+
+  # ============================================================
+  # Consulting (NAICS 5416) — professional services output
+  # Expected rho range: [45, 60] — reports and analyses are text-heavy
+  # ============================================================
+  - {ticker: ACN,  sector: consulting, expected_rho: 50, company: "Accenture"}
+  - {ticker: BAH,  sector: consulting, expected_rho: 45, company: "Booz Allen Hamilton"}
+  - {ticker: ICFI, sector: consulting, expected_rho: 55, company: "ICF International"}
+  - {ticker: FCN,  sector: consulting, expected_rho: 45, company: "FTI Consulting"}
+  - {ticker: CRAI, sector: consulting, expected_rho: 55, company: "CRA International"}
+  - {ticker: HURN, sector: consulting, expected_rho: 50, company: "Huron Consulting"}
+  - {ticker: EXPO, sector: consulting, expected_rho: 45, company: "Exponent"}
+  - {ticker: HCKT, sector: consulting, expected_rho: 50, company: "Hackett Group"}
+  - {ticker: EXLS, sector: consulting, expected_rho: 60, company: "ExlService Holdings"}
+  - {ticker: III,  sector: consulting, expected_rho: 50, company: "Information Services Group"}
+
+
+placebo_tickers:
+
+  # ============================================================
+  # Pharma (SIC 2834 / NAICS 3254) — physical molecules, regulated production
+  # Expected rho range: [3, 8] — minimal product-level LLM substitutability
+  # LLMs cannot synthesize molecules; clinical trials require physical execution
+  # ============================================================
+  - {ticker: PFE,  sector: pharma, expected_rho: 5, company: "Pfizer"}
+  - {ticker: MRK,  sector: pharma, expected_rho: 5, company: "Merck"}
+  - {ticker: JNJ,  sector: pharma, expected_rho: 5, company: "Johnson & Johnson"}
+  - {ticker: ABBV, sector: pharma, expected_rho: 5, company: "AbbVie"}
+  - {ticker: BMY,  sector: pharma, expected_rho: 5, company: "Bristol-Myers Squibb"}
+  - {ticker: LLY,  sector: pharma, expected_rho: 5, company: "Eli Lilly"}
+  - {ticker: GILD, sector: pharma, expected_rho: 5, company: "Gilead Sciences"}
+  - {ticker: AMGN, sector: pharma, expected_rho: 5, company: "Amgen"}
+  - {ticker: REGN, sector: pharma, expected_rho: 5, company: "Regeneron Pharmaceuticals"}
+  - {ticker: VRTX, sector: pharma, expected_rho: 5, company: "Vertex Pharmaceuticals"}
+
+  # ============================================================
+  # Energy (SIC 1311 / NAICS 2111) — physical resource extraction
+  # Expected rho range: [2, 5] — core operations are geological / mechanical
+  # ============================================================
+  - {ticker: XOM,  sector: energy, expected_rho: 2, company: "ExxonMobil"}
+  - {ticker: CVX,  sector: energy, expected_rho: 2, company: "Chevron"}
+  - {ticker: COP,  sector: energy, expected_rho: 2, company: "ConocoPhillips"}
+  - {ticker: EOG,  sector: energy, expected_rho: 2, company: "EOG Resources"}
+  - {ticker: PSX,  sector: energy, expected_rho: 2, company: "Phillips 66"}
+  - {ticker: SLB,  sector: energy, expected_rho: 5, company: "Schlumberger"}
+  - {ticker: HAL,  sector: energy, expected_rho: 5, company: "Halliburton"}
+  - {ticker: OXY,  sector: energy, expected_rho: 2, company: "Occidental Petroleum"}
+
+  # ============================================================
+  # Heavy manufacturing (SIC 3xxx) — physical product engineering + production
+  # Expected rho range: [2, 8] — design work partially LLM-exposed, production not
+  # ============================================================
+  - {ticker: CAT,  sector: manufacturing, expected_rho: 3, company: "Caterpillar"}
+  - {ticker: DE,   sector: manufacturing, expected_rho: 3, company: "Deere & Co"}
+  - {ticker: GE,   sector: manufacturing, expected_rho: 5, company: "General Electric"}
+  - {ticker: HON,  sector: manufacturing, expected_rho: 8, company: "Honeywell International"}
+  - {ticker: MMM,  sector: manufacturing, expected_rho: 5, company: "3M Company"}
+  - {ticker: EMR,  sector: manufacturing, expected_rho: 5, company: "Emerson Electric"}
+  - {ticker: F,    sector: manufacturing, expected_rho: 3, company: "Ford Motor"}
+  - {ticker: GM,   sector: manufacturing, expected_rho: 3, company: "General Motors"}
+
+  # ============================================================
+  # Payments infrastructure — network-effect moats, not text products
+  # Expected rho range: [8, 15] — transaction routing infrastructure, not LLM-substitutable
+  # ============================================================
+  - {ticker: V,    sector: payments, expected_rho: 10, company: "Visa"}
+  - {ticker: MA,   sector: payments, expected_rho: 10, company: "Mastercard"}
+  - {ticker: PYPL, sector: payments, expected_rho: 15, company: "PayPal Holdings"}
+  - {ticker: FISV, sector: payments, expected_rho: 15, company: "Fiserv"}
