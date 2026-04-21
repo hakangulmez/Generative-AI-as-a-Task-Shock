@@ -1,0 +1,18 @@
+# Validated lexicon from arXiv:2508.19313 (98.78% precision)
+ai_terms:
+  - "AI"
+  - "artificial intelligence"
+  - "machine learning"
+  - "deep learning"
+  - "neural network"
+  - "generative AI"
+  - "LLM"
+  - "large language model"
+  - "ChatGPT"
+  - "transformer"
+  - "foundation model"
+
+exclusions_regex:
+  - "\\bAIDS?\\b"
+  - "\\bAIS\\b"
+  - "\\bkaizen\\b"

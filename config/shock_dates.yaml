@@ -1,0 +1,16 @@
+primary_shock:
+  name: ChatGPT
+  date: 2022-11-30
+  post_cutoff: 2022-10-01
+
+staggered_shocks:
+  - {name: ChatGPT,          date: 2022-11-30, capability: "baseline LLM access"}
+  - {name: GPT-4,            date: 2023-03-14, capability: "frontier reasoning"}
+  - {name: Claude-2,         date: 2023-07-11, capability: "long-context alternative"}
+  - {name: M365-Copilot-GA,  date: 2023-11-01, capability: "enterprise bundling"}
+  - {name: Claude-3,         date: 2024-03-04, capability: "multimodal frontier"}
+  - {name: GPT-4o,           date: 2024-05-13, capability: "real-time multimodal"}
+  - {name: Claude-Artifacts, date: 2024-06-20, capability: "in-chat app generation"}
+  - {name: Computer-Use,     date: 2024-10-22, capability: "workflow automation"}
+  - {name: o1,               date: 2024-12-05, capability: "reasoning models"}
+  - {name: Claude-Code,      date: 2025-02-24, capability: "developer substitution"}

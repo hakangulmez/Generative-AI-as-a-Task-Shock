@@ -1,0 +1,31 @@
+supply_anchors:
+  # 9 B2B software anchors
+  ZS:   {rho: 10, profile: "Real-time zero-trust security, all E0, moat=-2"}
+  DDOG: {rho: 16, profile: "Infrastructure observability, mostly E0, moat=-1"}
+  CRWD: {rho: 22, profile: "Endpoint security, real-time telemetry, moat=-2"}
+  VEEV: {rho: 38, profile: "Pharma CRM + regulatory submissions, moat=-2"}
+  PAYC: {rho: 45, profile: "HCM/payroll, text-heavy + compliance, moat=-1"}
+  HUBS: {rho: 64, profile: "CRM/marketing, written communication core, moat=-1"}
+  LPSN: {rho: 72, profile: "Conversational AI platform, mostly E1, moat=0"}
+  EGAN: {rho: 80, profile: "Knowledge management, all E1, moat=0"}
+  ZIP:  {rho: 88, profile: "Job marketplace, all text matching, moat=0"}
+  # 5 knowledge-product anchors (US 10-K filers only)
+  MCO:  {rho: 30, profile: "Credit ratings; text outputs but regulatory moat"}
+  SPGI: {rho: 35, profile: "Ratings + indices + market intelligence"}
+  MSCI: {rho: 40, profile: "Indices + ESG analytics + portfolio tools"}
+  CHGG: {rho: 75, profile: "Homework help, text-heavy, directly exposed"}
+  COUR: {rho: 60, profile: "Online courses, content ecosystem"}
+
+demand_anchors:
+  ZS:   {d_switch: 0.8, d_error: 0.8, d_data: 0.2, d_composite: 0.600}
+  DDOG: {d_switch: 0.6, d_error: 0.4, d_data: 0.2, d_composite: 0.400}
+  VEEV: {d_switch: 1.0, d_error: 1.0, d_data: 0.6, d_composite: 0.867}
+  PAYC: {d_switch: 0.6, d_error: 0.8, d_data: 0.1, d_composite: 0.500}
+  HUBS: {d_switch: 0.4, d_error: 0.2, d_data: 0.3, d_composite: 0.300}
+  LPSN: {d_switch: 0.3, d_error: 0.1, d_data: 0.2, d_composite: 0.200}
+  ZIP:  {d_switch: 0.1, d_error: 0.1, d_data: 0.7, d_composite: 0.300}
+  MCO:  {d_switch: 0.9, d_error: 1.0, d_data: 0.9, d_composite: 0.933}
+  SPGI: {d_switch: 0.8, d_error: 0.9, d_data: 0.9, d_composite: 0.867}
+  MSCI: {d_switch: 0.7, d_error: 0.7, d_data: 0.8, d_composite: 0.733}
+  CHGG: {d_switch: 0.1, d_error: 0.1, d_data: 0.1, d_composite: 0.100}
+  COUR: {d_switch: 0.4, d_error: 0.3, d_data: 0.2, d_composite: 0.300}

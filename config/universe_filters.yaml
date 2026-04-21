@@ -1,0 +1,20 @@
+primary:
+  sic_codes: [7370, 7371, 7372, 7373, 7374, 7375, 7376, 7377, 7378, 7379]
+  exchanges: [NYSE, NASDAQ, NYSE American]
+  min_pre_shock_quarters: 6
+
+extended:
+  naics_codes: ["5191", "5111", "5415", "5182", "6113", "61141", "5416"]
+  exchanges: [NYSE, NASDAQ, NYSE American]
+  min_pre_shock_quarters: 6
+  sec_filer_only: true
+
+exclusions:
+  - {ticker: IIIV, reason: "Post-privatization accounting restatements"}
+
+business_model_types:
+  a: software_product_vendor_knowledge_task_core
+  b: platform_infrastructure
+  c: cybersecurity_telemetry_realtime
+  d: embedded_integrator
+  e: mixed_or_other
