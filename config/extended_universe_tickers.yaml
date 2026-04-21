@@ -1,0 +1,44 @@
+# Manual curation of knowledge-product firms outside SIC 7370-7379.
+# Used as a FALLBACK and a SANITY CHECK for the auto SIC→NAICS crosswalk.
+# All must be SEC 10-K filers; foreign (20-F) filers excluded.
+
+knowledge_product_tickers:
+  # NAICS 5191 — Information services (data moats expected high)
+  - {ticker: MCO,  naics: 5191, company: "Moody's Corporation"}
+  - {ticker: SPGI, naics: 5191, company: "S&P Global"}
+  - {ticker: MSCI, naics: 5191, company: "MSCI Inc"}
+  - {ticker: FDS,  naics: 5191, company: "FactSet Research Systems"}
+  - {ticker: VRSK, naics: 5191, company: "Verisk Analytics"}
+  - {ticker: MORN, naics: 5191, company: "Morningstar"}
+  - {ticker: EFX,  naics: 5191, company: "Equifax"}
+  - {ticker: TRU,  naics: 5191, company: "TransUnion"}
+  - {ticker: DNB,  naics: 5191, company: "Dun & Bradstreet"}
+  - {ticker: FICO, naics: 5191, company: "Fair Isaac"}
+
+  # NAICS 5111 — Publishing
+  - {ticker: JW-A, naics: 5111, company: "John Wiley & Sons"}
+  - {ticker: NWSA, naics: 5111, company: "News Corp"}
+  - {ticker: NYT,  naics: 5111, company: "New York Times"}
+  - {ticker: DJCO, naics: 5111, company: "Daily Journal"}
+
+  # NAICS 6113/6114 — Education
+  - {ticker: CHGG, naics: 6114, company: "Chegg"}
+  - {ticker: COUR, naics: 6114, company: "Coursera"}
+  - {ticker: TU,   naics: 6114, company: "2U"}
+  - {ticker: STRA, naics: 6113, company: "Strategic Education"}
+  - {ticker: LRN,  naics: 6114, company: "Stride"}
+  - {ticker: LOPE, naics: 6113, company: "Grand Canyon Education"}
+  - {ticker: ATGE, naics: 6113, company: "Adtalem Global"}
+
+  # NAICS 5416 — Consulting
+  - {ticker: ACN,  naics: 5416, company: "Accenture"}
+  - {ticker: BAH,  naics: 5416, company: "Booz Allen Hamilton"}
+  - {ticker: ICFI, naics: 5416, company: "ICF International"}
+  - {ticker: FCN,  naics: 5416, company: "FTI Consulting"}
+  - {ticker: CRAI, naics: 5416, company: "CRA International"}
+  - {ticker: HURN, naics: 5416, company: "Huron Consulting"}
+
+  # NAICS 5415 — Computer Systems Design (adjacent to primary 7370)
+  - {ticker: INFY, naics: 5415, company: "Infosys"}
+  - {ticker: WIT,  naics: 5415, company: "Wipro"}
+  - {ticker: GLOB, naics: 5415, company: "Globant"}
