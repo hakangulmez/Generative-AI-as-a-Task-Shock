@@ -5,6 +5,7 @@ thesis.tex
 # Data (gitignored for privacy/size)
 data/raw/
 data/processed/
+data/external/
 text_data/
 
 # Logs
@@ -21,6 +22,9 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+*.egg-info/
+dist/
+build/
 
 # R
 .Rhistory

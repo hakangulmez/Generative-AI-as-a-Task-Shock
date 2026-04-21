@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thesis-pipeline"
+version = "2.0.0"
+description = "Empirical pipeline for 'Generative AI as a Task Shock: Product-Level LLM Substitution in B2B Software Markets'"
+authors = [{name = "Hakan Zeki Gülmez", email = "hakanzekigulmez@gmail.com"}]
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.1",
+    "requests",
+    "anthropic>=0.40",
+    "openai>=1.50",
+    "python-dotenv",
+    "tqdm",
+    "pyarrow",
+    "pyyaml",
+    "beautifulsoup4",
+    "lxml",
+    "huggingface_hub",
+    "scipy",
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ipykernel", "jupyterlab"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["scripts*"]

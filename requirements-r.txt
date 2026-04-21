@@ -1,0 +1,18 @@
+# R packages required for econometric analysis
+# Install via: install.packages(readLines("requirements-r.txt"))
+fixest
+fwildclusterboot
+clubSandwich
+HonestDiD
+did
+arrow
+broom
+kableExtra
+remotes
+dplyr
+tidyr
+ggplot2
+purrr
+readr
+stringr
+lubridate
