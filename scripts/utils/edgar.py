@@ -184,8 +184,13 @@ def get_submissions(cik: int | str) -> dict:
         if page_raw is None:
             continue
         page_data = json.loads(page_raw)
-        recent = page_data.get("recent", {})
-        for key, vals in recent.items():
+        # Older pagination pages use a flat structure (arrays at top level)
+        # rather than nesting under a "recent" key.  Fall back to top-level
+        # when "recent" is absent, and skip any non-list values.
+        page_recent = page_data.get("recent") or page_data
+        for key, vals in page_recent.items():
+            if not isinstance(vals, list):
+                continue
             existing = data["filings"]["recent"].get(key, [])
             data["filings"]["recent"][key] = existing + vals
 
