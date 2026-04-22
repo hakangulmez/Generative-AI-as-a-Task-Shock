@@ -597,6 +597,56 @@ def _extract_instant_raw(us_gaap: dict, tag: str) -> dict[str, dict]:
     return result
 
 
+def extract_instant_sum(
+    us_gaap: dict,
+    tag1: str,
+    tag2: str,
+) -> dict[str, dict]:
+    """
+    Sum two instant-metric (balance-sheet) tags at matching period_ends.
+
+    Used for RPO tier 3/4 fallback where current and noncurrent components
+    are reported separately and must be combined.
+
+    Rules:
+    - Both tags have data at a period_end → sum their values.
+    - Only one tag exists in us_gaap at all → use that tag's values alone
+      (the other component is genuinely absent for this firm).
+    - Both tags exist in us_gaap but a period_end appears in only one →
+      skip it (filing-specific gap, not a genuine absence of the component).
+
+    Returns {quarter_label: {"period_end", "fiscal_year", "fiscal_quarter",
+                              "val", "filed"}}
+    """
+    d1 = _extract_instant_raw(us_gaap, tag1)
+    d2 = _extract_instant_raw(us_gaap, tag2)
+
+    tag1_present = tag1 in us_gaap
+    tag2_present = tag2 in us_gaap
+
+    if not tag1_present and not tag2_present:
+        return {}
+    if not tag2_present:
+        return d1
+    if not tag1_present:
+        return d2
+
+    # Both tags in filings — require matching period_ends, sum values
+    result: dict[str, dict] = {}
+    for label in set(d1.keys()) & set(d2.keys()):
+        v1, v2 = d1[label], d2[label]
+        if v1["val"] is None or v2["val"] is None:
+            continue
+        result[label] = {
+            "period_end":     v1["period_end"],
+            "fiscal_year":    v1["fiscal_year"],
+            "fiscal_quarter": v1["fiscal_quarter"],
+            "val":            v1["val"] + v2["val"],
+            "filed":          max(v1["filed"], v2["filed"]),
+        }
+    return result
+
+
 def extract_quarterly_metric(
     companyfacts_json: dict,
     tag_list: list[str],
