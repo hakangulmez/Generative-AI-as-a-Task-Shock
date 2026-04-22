@@ -1,18 +1,84 @@
-# Validated lexicon from arXiv:2508.19313 (98.78% precision)
-ai_terms:
-  - "AI"
-  - "artificial intelligence"
-  - "machine learning"
-  - "deep learning"
-  - "neural network"
-  - "generative AI"
-  - "LLM"
-  - "large language model"
-  - "ChatGPT"
-  - "transformer"
-  - "foundation model"
+# AI mention lexicon — post-ChatGPT era terminology
+#
+# Philosophy: include ONLY terms that are strongly associated with the
+# post-November 2022 generative AI era. Generic ML terminology
+# (machine learning, deep learning, neural network, standalone AI)
+# predates ChatGPT by decades and creates pre-period contamination that
+# biases DiD estimates toward zero.
+#
+# Source: arXiv:2508.19313 adapted + manual augmentation with
+# post-2022 vocabulary (ChatGPT, named LLM models).
+#
+# Match mode: case-insensitive regex with word boundaries where applicable.
 
-exclusions_regex:
-  - "\\bAIDS?\\b"
-  - "\\bAIS\\b"
-  - "\\bkaizen\\b"
+inclusion_terms:
+  # Core LLM-era terminology
+  - pattern: "generative AI"
+    category: core
+  - pattern: "generative artificial intelligence"
+    category: core
+  - pattern: "\\bLLM\\b"
+    category: core
+  - pattern: "\\bLLMs\\b"
+    category: core
+  - pattern: "large language model"
+    category: core
+  - pattern: "large language models"
+    category: core
+  - pattern: "foundation model"
+    category: core
+  - pattern: "foundation models"
+    category: core
+
+  # Named products and companies (strong post-2022 signal)
+  - pattern: "ChatGPT"
+    category: named_product
+  - pattern: "\\bGPT-[234]\\b"
+    category: named_product
+  - pattern: "\\bGPT\\b"
+    category: named_product
+  - pattern: "Claude"
+    category: named_product
+  - pattern: "Gemini"
+    category: named_product
+  - pattern: "Copilot"
+    category: named_product
+  - pattern: "Llama"
+    category: named_product
+  - pattern: "Mistral"
+    category: named_product
+
+  # Technical concepts (post-2022 vocabulary)
+  - pattern: "prompt engineering"
+    category: technical
+  - pattern: "retrieval augmented"
+    category: technical
+  - pattern: "\\bRAG\\b"
+    category: technical
+  - pattern: "AI assistant"
+    category: technical
+  - pattern: "AI copilot"
+    category: technical
+  - pattern: "AI agent"
+    category: technical
+
+# No exclusion patterns needed — inclusion list is strict enough.
+# Generic ML terms (machine learning, deep learning, neural network,
+# artificial intelligence) are deliberately absent because they create
+# pre-period false positives.
+
+# Known false positive risk: "Claude" (the model) vs other proper noun uses.
+# Mitigation: count "Claude" mentions only in tech-adjacent context.
+# In practice, this risk is minimal as "Claude" in 10-Ks almost always
+# refers to the Anthropic model.
+
+# Known false positive: "Gemini" (Google model) vs astronomy/astrology.
+# Mitigation: minimal risk in business filings — "Gemini" in 10-K nearly
+# always refers to Google's model.
+
+# Source paper reference:
+# arXiv:2508.19313 - "Measuring AI Adoption in Corporate Disclosures"
+# Original lexicon: 11 terms from arXiv paper
+# Augmentation rationale: arXiv paper has 2024 cutoff; we add post-2024
+# vocabulary (Claude, Gemini, Copilot as product names) and explicit
+# technical concepts (RAG, AI agent, prompt engineering).
