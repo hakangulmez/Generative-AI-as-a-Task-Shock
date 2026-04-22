@@ -138,7 +138,7 @@ def _process_firm(
     rows: list[dict] = []
 
     # --- Revenue (dedicated extractor) ---
-    rev_series = xbrl.extract_quarterly_revenue(cf)
+    rev_series = xbrl.extract_quarterly_revenue(cf, best_coverage=True)
     if rev_series:
         qa["metrics_found"].append("revenue")
         for r in rev_series:

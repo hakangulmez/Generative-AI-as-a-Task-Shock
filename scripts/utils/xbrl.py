@@ -315,12 +315,21 @@ def _compute_q4(
 
 def extract_quarterly_revenue(
     companyfacts_json: dict,
+    *,
+    best_coverage: bool = False,
 ) -> list[dict]:
     """
     Extract quarterly revenue series from companyfacts JSON.
 
-    Tag priority order (REVENUE_TAGS): first tag with any data wins.
-    Includes Q4 computed from annual data via _compute_q4.
+    Parameters
+    ----------
+    best_coverage : bool, default False
+        If False (legacy): first tag in REVENUE_TAGS with any data wins.
+        If True: all tags tried; tag with most in-panel quarterly entries
+        (after Q4 computation) wins. Use True for the three-tier universe
+        panel to handle firms that switched XBRL tags mid-panel (ASC 606
+        transition pattern). Keep default False for legacy 248-firm
+        reproduction.
 
     Returns list of dicts sorted by period_end:
       {period_end, fiscal_year, fiscal_quarter, revenue, tag_used}
@@ -328,14 +337,7 @@ def extract_quarterly_revenue(
     """
     us_gaap = companyfacts_json.get("facts", {}).get("us-gaap", {})
 
-    for tag in REVENUE_TAGS:
-        quarters = _extract_quarterly_raw(us_gaap, tag)
-        if not quarters:
-            continue
-        annual = _extract_annual_raw(us_gaap, tag)
-        if annual:
-            q4s = _compute_q4(quarters, annual)
-            quarters.update(q4s)
+    def _to_records(quarters: dict, tag: str) -> list[dict]:
         return [
             {
                 "period_end":     v["period_end"],
@@ -347,7 +349,34 @@ def extract_quarterly_revenue(
             for v in sorted(quarters.values(), key=lambda x: x["period_end"])
         ]
 
-    return []
+    if not best_coverage:
+        # Legacy: first tag with any data wins
+        for tag in REVENUE_TAGS:
+            quarters = _extract_quarterly_raw(us_gaap, tag)
+            if not quarters:
+                continue
+            annual = _extract_annual_raw(us_gaap, tag)
+            if annual:
+                quarters.update(_compute_q4(quarters, annual))
+            return _to_records(quarters, tag)
+        return []
+
+    # Best-coverage: try all tags, pick the one with most observations
+    best_q: dict = {}
+    best_tag: Optional[str] = None
+    for tag in REVENUE_TAGS:
+        quarters = _extract_quarterly_raw(us_gaap, tag)
+        if not quarters:
+            continue
+        annual = _extract_annual_raw(us_gaap, tag)
+        if annual:
+            quarters.update(_compute_q4(quarters, annual))
+        if len(quarters) > len(best_q):
+            best_q = quarters
+            best_tag = tag
+    if best_tag is None:
+        return []
+    return _to_records(best_q, best_tag)
 
 
 def extract_quarterly_series(
