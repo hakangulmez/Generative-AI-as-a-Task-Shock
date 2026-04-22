@@ -522,6 +522,117 @@ def extract_rpo_series(companyfacts_json: dict) -> list[dict]:
     return []
 
 
+def _extract_instant_raw(us_gaap: dict, tag: str) -> dict[str, dict]:
+    """
+    Extract point-in-time (balance-sheet) entries for a single XBRL tag.
+
+    Unlike flow metrics there is no start date — these are snapshot values.
+    For duplicate quarter labels (amended filings): keep latest filed.
+    Form filter: 10-K, 10-Q, 10-K/A, 10-Q/A only.
+
+    Returns {quarter_label: {"period_end", "fiscal_year", "fiscal_quarter",
+                              "val", "filed"}}
+    """
+    if tag not in us_gaap:
+        return {}
+
+    entries = us_gaap[tag].get("units", {}).get("USD", [])
+    result: dict[str, dict] = {}
+
+    for e in entries:
+        end = e.get("end", "")
+        if not end or not (PANEL_START <= end <= PANEL_END):
+            continue
+        if e.get("form", "") not in _VALID_FORMS:
+            continue
+        filed = e.get("filed", "")
+        val   = e.get("val")
+        if val is None:
+            continue
+
+        parsed = quarter_from_date(end)
+        if parsed is None:
+            continue
+        yr, q = parsed
+        label = period_to_quarter_label(yr, q)
+
+        if label not in result or filed > result[label]["filed"]:
+            result[label] = {
+                "period_end":     end,
+                "fiscal_year":    yr,
+                "fiscal_quarter": q,
+                "val":            val,
+                "filed":          filed,
+            }
+
+    return result
+
+
+def extract_quarterly_metric(
+    companyfacts_json: dict,
+    tag_list: list[str],
+    *,
+    is_instant: bool = False,
+    fallback_sum_tags: Optional[list[str]] = None,
+) -> tuple[dict[str, dict], Optional[str]]:
+    """
+    Generic extractor for a single financial metric.
+
+    Parameters
+    ----------
+    tag_list         : XBRL tags tried in priority order; first with data wins.
+    is_instant       : True for balance-sheet stocks (point-in-time, no Q4 formula).
+                       False for income statement / cash flow flows.
+    fallback_sum_tags: If provided and primary tags yield no data, sum these
+                       component tags (e.g. SGA = S&M + G&A).
+
+    Returns
+    -------
+    (data, tag_used)
+    data     : {quarter_label: {"period_end", "fiscal_year", "fiscal_quarter", "val"}}
+    tag_used : winning tag name, "fallback_sum" if component fallback fired, or None.
+    """
+    us_gaap = companyfacts_json.get("facts", {}).get("us-gaap", {})
+
+    if is_instant:
+        best_result: dict = {}
+        best_tag: Optional[str] = None
+        for tag in tag_list:
+            result = _extract_instant_raw(us_gaap, tag)
+            if len(result) > len(best_result):
+                best_result = result
+                best_tag = tag
+        if best_tag is not None:
+            return best_result, best_tag
+        return {}, None
+
+    # Duration / flow metrics: best-coverage wins (most in-panel observations)
+    best_q: dict = {}
+    best_tag_flow: Optional[str] = None
+    for tag in tag_list:
+        q = _extract_quarterly_raw(us_gaap, tag)
+        if not q:
+            continue
+        ann = _extract_annual_raw(us_gaap, tag)
+        if ann:
+            q.update(_compute_q4(q, ann))
+        if len(q) > len(best_q):
+            best_q = q
+            best_tag_flow = tag
+    if best_tag_flow is not None:
+        return best_q, best_tag_flow
+
+    # Component fallback (SGA = SellingAndMarketing + GeneralAndAdmin)
+    if fallback_sum_tags:
+        combined = extract_quarterly_series(
+            companyfacts_json, fallback_sum_tags, accumulate=True
+        )
+        if combined:
+            return combined, "fallback_sum"
+
+    return {}, None
+
+
 def extract_deferred_revenue_series(companyfacts_json: dict) -> list[dict]:
     """
     Extract combined deferred revenue (current + noncurrent) at each period_end.
