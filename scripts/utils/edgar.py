@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
@@ -264,3 +265,109 @@ def get_filing_text(accession_no: str, cik: int | str, doc_name: str) -> Optiona
 
     cache_path.write_text(raw, encoding="utf-8", errors="replace")
     return raw
+
+
+# ---------------------------------------------------------------------------
+# Pre-shock 10-K discovery (ported from legacy collect_10k_text.py)
+# ---------------------------------------------------------------------------
+
+_10K_FORMS_NONAMEND = frozenset({"10-K", "10-K405"})
+_10K_FORMS_ALL      = frozenset({"10-K", "10-K405", "10-K/A"})
+
+
+def _search_10k_block(block: dict, cutoff: str) -> Optional[tuple]:
+    """Search a filings block for the most recent 10-K filed before cutoff.
+
+    Filings arrive in reverse chronological order; first non-amended match wins.
+    Returns (accession, filing_date, primary_doc_hint, form_type) or None.
+    """
+    forms        = block.get("form",            [])
+    dates        = block.get("filingDate",       [])
+    accessions   = block.get("accessionNumber",  [])
+    primary_docs = block.get("primaryDocument",  [])
+
+    best: Optional[tuple] = None
+    for i, form in enumerate(forms):
+        form = form.strip()
+        if form not in _10K_FORMS_ALL or dates[i] >= cutoff:
+            continue
+        pdoc      = primary_docs[i] if i < len(primary_docs) else ""
+        candidate = (accessions[i], dates[i], pdoc, form)
+        if best is None:
+            best = candidate
+            if form in _10K_FORMS_NONAMEND:
+                break                          # non-amended, most-recent — ideal
+        elif best[3] not in _10K_FORMS_NONAMEND and form in _10K_FORMS_NONAMEND:
+            best = candidate
+            break                              # upgrade from amended to non-amended
+
+    return best
+
+
+def find_pre_shock_10k(cik: int | str,
+                       cutoff: str = "2022-11-01") -> Optional[tuple]:
+    """Find the most recent pre-shock 10-K filing for a CIK.
+
+    Relies on get_submissions(), which already merges older filing-history pages
+    into filings.recent at cache time — no extra HTTP needed after Phase 1.
+
+    Returns (accession, filing_date, primary_doc_hint, form_type) or None.
+    Prefers 10-K / 10-K405 over 10-K/A.
+    """
+    subs   = get_submissions(cik)
+    recent = subs.get("filings", {}).get("recent", {})
+    return _search_10k_block(recent, cutoff)
+
+
+def find_primary_doc(cik: int | str, accession_no: str) -> Optional[str]:
+    """Find the primary document filename within a filing via index.json.
+
+    Used only as a fallback when primaryDocument hint from submissions is empty.
+    Returns filename (e.g. 'form10k.htm'), not a full URL. None on failure.
+    """
+    index = get_filing_index(cik, accession_no)
+    if index is None:
+        return None
+
+    items = index.get("directory", {}).get("item", [])
+
+    def _is_exhibit(name: str, desc: str) -> bool:
+        d = desc.upper()
+        n = name.lower()
+        return ("EX-" in d or "EXHIBIT" in d
+                or bool(re.search(r"-ex\d", n))
+                or n.startswith("exhibit"))
+
+    def _is_viewer(name: str) -> bool:
+        return bool(re.match(r"^R\d+\.htm$", name, re.IGNORECASE))
+
+    docs = []
+    for item in items:
+        name = item.get("name", "")
+        try:
+            size = int(str(item.get("size", "0")).replace(",", ""))
+        except ValueError:
+            size = 0
+        docs.append({
+            "name": name,
+            "type": item.get("type", "").strip(),
+            "desc": item.get("description", ""),
+            "size": size,
+        })
+
+    # Priority 1: type field matches a known 10-K form
+    for form in ("10-K", "10-K405", "10-K/A"):
+        for doc in docs:
+            if doc["type"] == form and doc["name"].lower().endswith((".htm", ".html")):
+                return doc["name"]
+
+    # Priority 2: largest non-exhibit, non-viewer .htm
+    htm    = [d for d in docs
+              if d["name"].lower().endswith((".htm", ".html")) and not _is_viewer(d["name"])]
+    non_ex = [d for d in htm if not _is_exhibit(d["name"], d["desc"])]
+    if non_ex:
+        return max(non_ex, key=lambda d: d["size"])["name"]
+    if htm:
+        return max(htm, key=lambda d: d["size"])["name"]
+
+    return None
