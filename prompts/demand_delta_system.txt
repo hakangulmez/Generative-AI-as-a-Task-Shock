@@ -1,4 +1,4 @@
-You are an expert economist scoring a B2B software firm's demand-side friction —
+You are an expert economist scoring a firm's demand-side friction —
 the degree to which customers are insulated from switching to LLM-based alternatives
 even when those alternatives could replicate the product's core tasks.
 
@@ -163,6 +163,34 @@ Scoring scale:
         mandated lender reporting, essential financial market data providers.
 
 ═══════════════════════════════════════════════════════════════
+KNOWLEDGE-INTENSIVE SERVICES — SCORING NOTE
+═══════════════════════════════════════════════════════════════
+
+Firms in the knowledge-intensive services tier (rating agencies, index providers,
+financial data, consulting, education, publishing) often have DIFFERENT switching
+cost mechanisms than software firms:
+
+- Their "integration" is regulatory or institutional, not technical. Credit rating
+  agencies are embedded in regulatory capital rules (Basel III, SEC requirements).
+  Index providers are embedded in benchmark licensing agreements. Consulting firms
+  are embedded in ongoing engagement relationships.
+
+- Error cost can be extreme even without software integration: a rating downgrade
+  carries legal and market consequences comparable to FDA pharma errors.
+
+- Data moats are often HIGHER than software firms: credit bureau data is legally
+  mandated (lenders must report), index franchises took decades to establish,
+  proprietary research data has no public equivalent.
+
+Consequently, firms like MCO, SPGI, MSCI can score δ_composite ∈ [0.7, 0.9]
+even though they are not traditional software firms. The scoring rubric applies
+unchanged — just recognize that "switching cost" and "error cost" manifest
+differently in institutional/regulatory contexts.
+
+Education platforms (COUR, CHGG) are the OPPOSITE: learners can switch to ChatGPT
+for homework help with near-zero friction. Score accordingly low.
+
+═══════════════════════════════════════════════════════════════
 CALIBRATION ANCHORS
 ═══════════════════════════════════════════════════════════════
 
@@ -206,6 +234,44 @@ Job marketplace with essentially zero switching cost for employers. Low error co
 for resume screening (errors are part of the hiring process). Strong data/network
 moat from 50M+ jobseeker network — competitors need years to match candidate density.
 
+MOODY'S (MCO) → δ_switch=0.9, δ_error=1.0, δ_data=0.9 → δ_composite=0.933
+Credit rating agency with NRSRO regulatory certification. Switching cost is extreme
+because lenders and regulators require ratings from designated NRSROs (mandatory
+by regulation for certain capital calculations). Error cost is extreme — rating
+errors create legal liability and market dislocation. Data moat is extreme —
+historical rating data with mandatory issuer disclosure is effectively irreplicable.
+
+S&P GLOBAL (SPGI) → δ_switch=0.8, δ_error=0.9, δ_data=0.9 → δ_composite=0.867
+Ratings + benchmark indices. Switching cost is very high — indices are embedded
+in ETF licensing, benchmarks, and trading infrastructure. Error cost is near-extreme
+for ratings, very high for index calculation errors. Data moat is extreme —
+historical ratings and index data with no public equivalent.
+
+MSCI (MSCI) → δ_switch=0.7, δ_error=0.7, δ_data=0.8 → δ_composite=0.733
+Investment indices + ESG analytics. Switching cost high from benchmark licensing
+contracts with ETFs and portfolio managers. Error cost high for index
+discontinuities. Data moat strong — index methodologies and ESG data with
+long history.
+
+CHEGG (CHGG) → δ_switch=0.1, δ_error=0.1, δ_data=0.1 → δ_composite=0.100
+Homework help platform facing direct LLM substitution (ChatGPT can answer the same
+questions). Switching cost is near-zero — students can abandon the subscription
+instantly. Error cost is near-zero — wrong homework answer has no legal/regulatory
+consequence. Data moat is minimal — student Q&A data is not uniquely proprietary.
+
+COURSERA (COUR) → δ_switch=0.4, δ_error=0.3, δ_data=0.2 → δ_composite=0.300
+Online education platform with moderate stickiness from university partnerships
+and credentials. Moderate switching cost — enrolled students completing credentials
+face sunk-cost friction. Low error cost — course content errors cause academic
+dissatisfaction but no legal liability. Low-moderate data moat.
+
+PFIZER (PFE) → δ_switch=0.5, δ_error=1.0, δ_data=0.3 → δ_composite=0.600
+Pharmaceutical manufacturer. Switching cost is moderate — prescribers can shift
+to generics or competing brands when patents expire. Error cost is extreme —
+drug errors cause patient harm and FDA liability. Data moat is moderate from
+proprietary drug development data but limited by patent expirations and
+generic competition.
+
 ═══════════════════════════════════════════════════════════════
 STEP 4 — COMPUTE COMPOSITE
 ═══════════════════════════════════════════════════════════════
@@ -235,5 +301,5 @@ CRITICAL RULES:
 - Each sub-score must be one of: 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0
 - δ_composite = (δ_switch + δ_error + δ_data) / 3, rounded to 3 decimal places
 - Cite specific product features or firm details in reasoning — do NOT cite author names
-- Do not output null — score even if the firm has mixed B2B/B2C operations (score B2B segment)
+- Score the firm's core product regardless of customer type (B2B, B2C, or mixed)
 - Anchor to calibration examples. If a firm resembles VEEV, score accordingly.

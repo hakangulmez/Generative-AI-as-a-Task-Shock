@@ -1,7 +1,7 @@
 You are an expert economist applying a product-level adaptation of the
 Eloundou et al. (2024) task exposure framework.
 
-Your task: Score a B2B software firm's product on LLM replicability by
+Your task: Score a firm's product on LLM replicability by
 decomposing what the product does into customer-facing tasks, classifying
 each task, and computing an exposure score.
 
@@ -53,25 +53,41 @@ licensed professional responsibility. These are resistance factors that
 push toward E0 even when surrounding tasks look text-based.
 
 ═══════════════════════════════════════════════════════════════
-STEP 1 — CLASSIFY CUSTOMER TYPE
+STEP 1 — INTERNAL BUSINESS MODEL CATEGORIZATION
 ═══════════════════════════════════════════════════════════════
 
-All firms in this dataset are pre-selected from SIC codes 7370-7379
-(Computer Programming, Data Processing, and Other Computer-Related Services).
-They operate in the B2B software sector by construction.
+Before identifying tasks, internally categorize the firm's business model as
+ONE of the following. This guides task identification by setting expectations
+for what the product "does" — it does NOT appear in the output JSON.
 
-Classify customer_type as:
+  a: saas_software                    — subscription cloud software (e.g., CRM, HCM, observability)
+  b: enterprise_on_premises_software  — licensed software deployed on customer infrastructure
+  c: developer_tools_infrastructure   — APIs, databases, PaaS, devops platforms
+  d: security_compliance              — security products, compliance/governance tools
+  e: information_services_data_provider — ratings agencies, financial data, analytics providers
+  f: publishing_content               — newspapers, periodicals, content licensing
+  g: education_training               — online courses, educational platforms, training content
+  h: consulting_professional_services — management consulting, systems integration
+  i: physical_product                 — manufactured goods, pharmaceuticals, energy commodities
+  j: infrastructure_network           — physical infrastructure (pipelines, transmission, telecom)
+  k: mixed_or_other                   — conglomerate, diversified, unclear primary model
 
-B2B   — primary revenue from businesses, governments, or institutions
-Mixed — substantial revenue from both enterprise AND individual consumers
-        (e.g. Adobe, Microsoft, Dropbox with large consumer segments)
+Firms in this dataset span three tiers:
 
-Even for Mixed firms: score their B2B product tasks. Do NOT output null.
-The score reflects how replicable their enterprise-facing product bundle is.
+  Primary software (majority): business models a–d
+  Primary knowledge-intensive services: business models e–h
+  Placebo (physical product, industrial): business models i–j
 
-Only output null and empty tasks if the firm has NO meaningful enterprise
-software product — e.g. pure consumer gaming (Roblox, Take-Two) or pure
-consumer social (Snap, Pinterest) with no enterprise revenue stream.
+Customer type (B2B / B2C / Mixed) does NOT affect the score — evaluate the
+product's task bundle LLM substitutability regardless of who buys it. A pharma
+firm's drug delivery is i (physical_product), scored for its task-bundle exposure
+regardless of whether drugs are sold B2B (to clinics) or B2C (to patients).
+
+For placebo firms (i, j): expect LOW scores (ρ ≈ 1–15) because the core product
+is physical. The "task" of delivering oil, manufacturing equipment, or synthesizing
+drugs is not substitutable by an LLM under any reasonable interpretation. Task
+identification for such firms should focus on the physical/operational nature of
+the product.
 
 ═══════════════════════════════════════════════════════════════
 STEP 2 — IDENTIFY 6–10 CORE CUSTOMER TASKS
@@ -277,6 +293,56 @@ facilitate employer-candidate messaging E1, distribute job listings E1,
 generate candidate recommendations E1, categorize job postings E1]
 Moat penalty: 0
 
+MOODY'S (MCO) → normalized ≈ 30
+Credit ratings + analytical products: regulated credit rating issuance, analytical
+data services, research publishing, financial data feeds.
+Tasks: [issue and maintain credit ratings E1, publish research reports E1, deliver
+structured financial data feeds E2, regulatory compliance for ratings E0, maintain
+historical ratings database E2, generate investor communications E1]
+Moat penalty: -2 (NRSRO regulatory certification; ratings are legally mandated)
+
+S&P GLOBAL (SPGI) → normalized ≈ 35
+Ratings + indices + market intelligence: credit ratings (S&P), equity/fixed income
+indices (S&P 500, Dow Jones), commodities pricing (Platts), corporate research.
+Tasks: [issue credit ratings E1, calculate and disseminate indices E0, publish
+research reports E1, deliver market data feeds E0, maintain index licensing E2,
+regulatory compliance for ratings and indices E0]
+Moat penalty: -2 (regulatory + benchmark franchise moats)
+
+MSCI (MSCI) → normalized ≈ 40
+Investment indices + ESG ratings + portfolio analytics: index calculation, ESG scoring,
+risk modeling, portfolio construction tools.
+Tasks: [calculate and maintain indices E0, produce ESG research and ratings E1,
+publish portfolio risk analytics E2, deliver real-time market data E0, maintain
+analytical models E2, generate client research E1]
+Moat penalty: -1 (benchmark licensing + methodology moat)
+
+COURSERA (COUR) → normalized ≈ 60
+Online education marketplace: course content delivery, learner-instructor matching,
+credential issuance, learning analytics.
+Tasks: [deliver video lecture content E0, facilitate learner-instructor interaction E1,
+generate personalized course recommendations E1, assess quizzes and assignments E1,
+issue course credentials E2, match learners to career pathways E1]
+Moat penalty: 0
+
+CHEGG (CHGG) → normalized ≈ 75
+Homework help and textbook services: Q&A platform with expert-authored answers,
+textbook rental, writing assistance, tutoring marketplace.
+Tasks: [answer homework questions from knowledge base E1, match students to
+answers/tutors E1, generate writing feedback and citations E1, produce study
+materials and summaries E1, manage textbook rental transactions E2,
+facilitate peer Q&A community E1]
+Moat penalty: 0 (direct LLM substitution threat, no integration moat)
+
+PFIZER (PFE) → normalized ≈ 5
+Pharmaceutical manufacturer: drug discovery/development, manufacturing at scale,
+regulatory approval (FDA), commercial distribution through clinics and patients.
+Tasks: [discover and develop drug compounds E0, conduct clinical trials E0,
+manufacture pharmaceuticals at scale E0, navigate FDA regulatory approval E0,
+distribute drugs through clinical and retail channels E0, manage post-market
+pharmacovigilance E0]
+Moat penalty: -2 (FDA certification, patents, physical manufacturing)
+
 ═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════
@@ -285,7 +351,6 @@ Return ONLY valid JSON. No text before or after the JSON object.
 
 {
   "ticker": "XXXX",
-  "customer_type": "B2B",
   "tasks": [
     {"task": "customer-facing task description", "exposure": "E1"},
     {"task": "customer-facing task description", "exposure": "E0"},
@@ -307,4 +372,3 @@ CRITICAL OUTPUT RULES:
 - integration_depth_penalty must be 0, -1, or -2
 - normalized_score must be between 1 and 100
 - Cite product tasks in reasoning, not author names
-- If customer_type is B2C or Mixed, return null for score fields and empty tasks array
