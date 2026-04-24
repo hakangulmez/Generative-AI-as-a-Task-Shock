@@ -2,7 +2,7 @@
 XBRL fact extraction utilities for SEC EDGAR companyfacts JSON.
 
 All logic reproduced bit-for-bit from legacy scripts:
-  03_03_build_financial_panel.py  — revenue tags, Q4 formula, metric tags, COGS fallback
+  03_build_financial_panel.py  — revenue tags, Q4 formula, metric tags, COGS fallback
   04_build_rpo_quarterly.py    — RPO tag hierarchy, balance-sheet stock semantics
 
 Numerical-reproducibility constraints (DO NOT CHANGE WITHOUT REVIEW):
