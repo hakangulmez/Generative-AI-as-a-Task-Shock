@@ -273,7 +273,7 @@ def get_filing_text(accession_no: str, cik: int | str, doc_name: str) -> Optiona
 
 
 # ---------------------------------------------------------------------------
-# Pre-shock 10-K discovery (ported from legacy collect_10k_text.py)
+# Pre-shock 10-K discovery (ported from legacy 02_collect_10k_text.py)
 # ---------------------------------------------------------------------------
 
 _10K_FORMS_NONAMEND = frozenset({"10-K", "10-K405"})

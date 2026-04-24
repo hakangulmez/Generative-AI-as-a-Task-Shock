@@ -2,8 +2,8 @@
 XBRL fact extraction utilities for SEC EDGAR companyfacts JSON.
 
 All logic reproduced bit-for-bit from legacy scripts:
-  build_financial_panel.py  — revenue tags, Q4 formula, metric tags, COGS fallback
-  build_rpo_quarterly.py    — RPO tag hierarchy, balance-sheet stock semantics
+  03_03_build_financial_panel.py  — revenue tags, Q4 formula, metric tags, COGS fallback
+  04_build_rpo_quarterly.py    — RPO tag hierarchy, balance-sheet stock semantics
 
 Numerical-reproducibility constraints (DO NOT CHANGE WITHOUT REVIEW):
   - REVENUE_TAGS order determines which revenue series wins for each firm
@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 # ---------------------------------------------------------------------------
-# Panel date bounds (must match build_financial_panel.py exactly)
+# Panel date bounds (must match 03_build_financial_panel.py exactly)
 # ---------------------------------------------------------------------------
 PANEL_START = "2019-01-01"
 PANEL_END   = "2025-12-31"
@@ -31,7 +31,7 @@ PANEL_END   = "2025-12-31"
 
 # NOTE: legacy order is RevenueFromContract... first, then Revenues.
 # The master prompt lists them in a different order; the code below
-# matches the ACTUAL legacy build_financial_panel.py exactly.
+# matches the ACTUAL legacy 03_build_financial_panel.py exactly.
 REVENUE_TAGS = [
     "RevenueFromContractWithCustomerExcludingAssessedTax",
     "RevenueFromContractWithCustomerIncludingAssessedTax",

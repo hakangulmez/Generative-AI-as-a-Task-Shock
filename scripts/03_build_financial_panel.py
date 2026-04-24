@@ -2,7 +2,7 @@
 Phase 3 — build quarterly financial panel in long format.
 
 Reads companyfacts from the EDGAR cache (data/raw/edgar_cache/companyfacts/).
-Does NOT fetch from EDGAR; run build_firm_universe.py / collect_10k_text.py first
+Does NOT fetch from EDGAR; run 01_build_firm_universe.py / 02_collect_10k_text.py first
 so that all companyfacts JSON files are already cached.
 
 Input:   data/raw/firm_universe.csv
