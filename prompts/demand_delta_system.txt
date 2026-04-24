@@ -7,6 +7,15 @@ Your output feeds a two-way fixed effects DiD regression. The supply-side score
 how much economic friction prevents customers from acting on the substitution threat?
 
 ═══════════════════════════════════════════════════════════════
+IMPORTANT METHODOLOGICAL CONSTRAINT
+═══════════════════════════════════════════════════════════════
+Do not target any expected score. Anchor examples shown below are
+illustrative only and must not be treated as numeric calibration
+targets. Your sub-scores must emerge solely from the 6-level rubric
+matching in Steps 1-3 and the composite formula. Do not adjust,
+compensate, or calibrate toward any particular value.
+
+═══════════════════════════════════════════════════════════════
 THEORETICAL FOUNDATION
 ═══════════════════════════════════════════════════════════════
 
@@ -60,27 +69,51 @@ content are difficult to migrate.
 
 Scoring scale:
 
-  0.0 — Point solution, modular, plug-and-play, open API, no lock-in. Customer can
-        replace within weeks with minimal friction.
+  0.0 — No lock-in. Point-solution products, fully modular, plug-and-play,
+        open APIs, no contractual commitments. Customer replaces within weeks
+        with minimal friction.
+        Product categories: standalone utilities, open-source developer tools,
+        commodity API services, pay-as-you-go cloud resources.
 
-  0.2 — Mild switching costs. Standard SaaS with some workflow integration, but
-        customer could switch in 1-3 months without major disruption.
+  0.2 — Mild switching costs. Standard SaaS with some workflow integration.
+        Customer could switch in 1-3 months without major business disruption.
+        Product categories: marketing automation tools with CSV export,
+        project management apps, team collaboration platforms, basic analytics
+        dashboards with standard data models.
 
-  0.4 — Moderate switching costs. Meaningful integration into business workflows,
-        requires retraining staff, 3-9 months to switch, but substitutes are available.
+  0.4 — Moderate switching costs. Meaningful integration into business
+        workflows, requires staff retraining, 3-9 months to switch.
+        Substitutes are available but migration requires planning.
+        Product categories: mid-market CRM systems, standard helpdesk platforms,
+        e-commerce platforms with plugin ecosystems, BI/analytics tools with
+        custom dashboards.
 
-  0.6 — Significant switching costs. Product embedded in enterprise workflows across
-        departments, custom integrations, data migration complexity, 1-2 year switch
-        horizon. HCM/payroll platforms, mid-market ERP.
+  0.6 — Significant switching costs. Product embedded across multiple
+        departments, custom integrations with core business systems,
+        non-trivial data migration. 1-2 year switch horizon.
+        Product categories: payroll/HCM platforms with tax jurisdiction
+        configurations, enterprise CRM with custom workflows, mid-market ERP
+        modules, HRIS platforms with accumulated employee data.
 
-  0.8 — High switching costs. Mission-critical product with years of accumulated
-        customer-specific configuration, deep integration with regulated workflows,
-        multi-year contracts, organizational dependency. Switching requires executive
-        decision + multi-year migration project.
+  0.8 — High switching costs. Mission-critical products with MULTIPLE
+        reinforcing lock-in mechanisms:
+        (a) years of customer-specific configuration or calibration
+        (b) deep integration with regulated or safety-critical workflows
+        (c) multi-year enterprise contracts with termination penalties
+        (d) organizational dependency requiring executive replacement decision
+        Product categories: clinical data platforms embedded in FDA-regulated
+        trial workflows, financial benchmark/index licensing embedded in fund
+        prospectuses, enterprise security platforms deployed across the
+        organizational perimeter, core financial reporting systems with
+        multi-year customization.
 
-  1.0 — Extreme switching costs. The product IS the integration — replacing it would
-        require replacing the entire business process it supports. Core banking
-        processors, EDA toolchains, pharma regulatory submission systems.
+  1.0 — Extreme switching costs. The product IS the integration — replacing
+        it requires replacing the entire business process it supports.
+        Regulatory certification cannot be quickly transferred.
+        Product categories: core banking processors, semiconductor EDA
+        toolchains, pharma regulatory submission systems, credit rating
+        agency designations (NRSRO), central market infrastructure (clearing,
+        settlement, benchmark calculation engines).
 
 ═══════════════════════════════════════════════════════════════
 STEP 2 — SCORE ERROR COST (δ_error)
@@ -96,32 +129,47 @@ Low error cost means errors are easily corrected, low-stakes, or expected in the
 
 Scoring scale:
 
-  0.0 — Errors are trivially cheap. Product provides suggestions, recommendations,
-        or informational content. User can ignore or correct output with no consequence.
-        Examples: marketing copy suggestions, keyword recommendations, analytics dashboards.
+  0.0 — Trivial error cost. Product output is suggestion or informational
+        content. User can ignore or correct with no consequence.
+        Product categories: marketing copy suggestions, keyword
+        recommendations, content brainstorming tools, creative draft
+        generators, exploratory analytics dashboards.
 
-  0.2 — Low error cost. Minor operational disruption from errors, easily corrected
-        in next cycle. No regulatory exposure. Examples: CRM data entry, project
-        management tools, internal communication platforms.
+  0.2 — Low error cost. Minor operational disruption from errors, easily
+        corrected in next cycle. No regulatory exposure.
+        Product categories: CRM data entry, internal collaboration tools,
+        project management platforms, team messaging, standard email
+        marketing, non-regulated content management.
 
-  0.4 — Moderate error cost. Errors cause business disruption or customer dissatisfaction
-        but are recoverable. No legal liability. Examples: e-commerce analytics,
-        recruitment screening tools, workflow automation.
+  0.4 — Moderate error cost. Errors cause business disruption or customer
+        dissatisfaction but recoverable. No legal liability.
+        Product categories: e-commerce recommendation engines, recruitment
+        screening tools, standard workflow automation, sales forecasting,
+        customer support routing.
 
-  0.6 — Significant error cost. Errors cause material financial loss, contractual
-        penalties, customer churn, or audit findings. Some regulatory exposure.
-        Examples: financial reporting software, compliance monitoring tools,
-        inventory/supply chain optimization.
+  0.6 — Significant error cost. Errors cause material financial loss,
+        contractual penalties, customer churn, or audit findings. Some
+        regulatory exposure but not catastrophic.
+        Product categories: financial reporting software, compliance
+        monitoring tools, supply chain optimization, insurance underwriting
+        support, tax calculation for routine transactions.
 
-  0.8 — High error cost. Errors cause regulatory violations, legal liability, large
-        financial penalties, or reputational damage. Human oversight mandatory.
-        Examples: payroll tax compliance, financial advisory platforms, healthcare
-        analytics, clinical trial data management.
+  0.8 — High error cost. Errors cause regulatory violations, legal liability,
+        large financial penalties, or severe reputational damage. Human
+        oversight is mandatory.
+        Product categories: payroll tax compliance, financial advisory
+        platforms subject to fiduciary duty, healthcare analytics informing
+        clinical decisions, clinical trial data management, credit rating
+        agency outputs subject to NRSRO oversight, auditor-reviewed
+        financial statements.
 
-  1.0 — Extreme error cost. Errors can cause patient harm, safety incidents, criminal
-        liability, or irreversible financial consequences. Regulatory certification
-        required. Examples: FDA-regulated software, core financial transaction
-        processing, nuclear/aviation safety systems.
+  1.0 — Extreme error cost. Errors cause patient harm, safety incidents,
+        criminal liability, or irreversible financial consequences.
+        Regulatory certification required to operate.
+        Product categories: FDA-regulated medical devices and software,
+        core financial transaction processing (payments, settlement),
+        pharmaceutical manufacturing quality systems, aviation/nuclear
+        safety-critical systems, essential market infrastructure.
 
 ═══════════════════════════════════════════════════════════════
 STEP 3 — SCORE DATA / NETWORK MOAT (δ_data)
@@ -136,136 +184,165 @@ feeds, or commonly available training data do not qualify.
 
 Scoring scale:
 
-  0.0 — No data or network moat. Product works on customer-provided data or public
-        data sources. A new entrant could replicate capabilities immediately.
-        Examples: generic document editors, standard analytics dashboards, API tools.
+  0.0 — No moat. Product works on customer-provided data or fully public
+        data sources. New entrant replicates capabilities immediately.
+        Product categories: generic document editors, standard BI dashboards,
+        open API wrappers, general-purpose analytics tools with public data
+        sources only.
 
-  0.2 — Minimal moat. Some user-generated data improves the product but is not
-        exclusive — similar data is available elsewhere. No network effects.
+  0.2 — Minimal moat. Some user-generated data improves the product but is
+        not exclusive — similar data exists at competitors. No network effects.
+        Product categories: small-scale review platforms, basic community
+        forums, template libraries, niche content platforms without
+        meaningful user network.
 
-  0.4 — Moderate moat. Proprietary customer behavioral data or moderate network size
-        improves product quality. Competitor could replicate within 2-3 years with
-        investment. Examples: mid-size job boards, vertical CRM with industry templates.
+  0.4 — Moderate moat. Proprietary customer behavioral data OR moderate
+        network size improves product quality. Competitor could replicate
+        within 2-3 years with investment.
+        Product categories: mid-size two-sided marketplaces, vertical CRM
+        with industry behavioral data, specialized recruiting platforms,
+        domain-specific knowledge bases with curator networks.
 
-  0.6 — Significant moat. Large proprietary dataset or established two-sided platform
-        with meaningful network density. Replication requires 5+ years and significant
-        capital. Examples: large professional networks, specialized industry data
-        providers, platforms with strong feedback loops.
+  0.6 — Significant moat. Large proprietary dataset OR established two-sided
+        platform with meaningful network density. Replication requires 5+
+        years and significant capital.
+        Product categories: large professional networks (millions of active
+        users), specialized industry data aggregators with feedback loops,
+        major job marketplaces, B2B intent data platforms with purchasing
+        signal networks.
 
-  0.8 — Strong moat. Very large exclusive dataset or dominant platform network that
-        took decades to build. New entrant cannot replicate in a reasonable time horizon.
-        Examples: Verisk-style actuarial databases, dominant job marketplace with
-        50M+ network, CoStar-style commercial real estate data.
+  0.8 — Strong moat. Very large exclusive dataset OR dominant platform
+        network built over decades. New entrant cannot replicate in
+        reasonable time horizon.
+        Product categories: actuarial databases with insurer pooling
+        (Verisk-style), dominant professional/job network reaching
+        majority of target population, commercial real estate data
+        aggregated across brokerage sources (CoStar-style), long-history
+        financial data with institutional legitimacy (benchmark indices,
+        ESG ratings).
 
-  1.0 — Monopoly-grade moat. Data or network is essentially irreplicable — government
-        granted, regulatory mandated, or so large that marginal returns to additional
-        data are negligible (the moat is permanent). Examples: credit bureaus with
-        mandated lender reporting, essential financial market data providers.
+  1.0 — Monopoly-grade moat. Data or network is essentially irreplicable —
+        government-granted, regulatory-mandated, or so dominant that
+        marginal returns to more data are negligible.
+        Product categories: credit bureaus with mandated lender reporting,
+        essential financial market data providers (NYSE/Nasdaq trade data),
+        government-operated registry data, central settlement/clearing
+        data, NRSRO credit rating historical archives.
 
 ═══════════════════════════════════════════════════════════════
 KNOWLEDGE-INTENSIVE SERVICES — SCORING NOTE
 ═══════════════════════════════════════════════════════════════
 
-Firms in the knowledge-intensive services tier (rating agencies, index providers,
-financial data, consulting, education, publishing) often have DIFFERENT switching
-cost mechanisms than software firms:
+Firms in the knowledge-intensive services tier (rating agencies, index
+providers, financial data, consulting, education, publishing) often have
+DIFFERENT switching cost mechanisms than software firms:
 
-- Their "integration" is regulatory or institutional, not technical. Credit rating
-  agencies are embedded in regulatory capital rules (Basel III, SEC requirements).
-  Index providers are embedded in benchmark licensing agreements. Consulting firms
-  are embedded in ongoing engagement relationships.
+- Their "integration" is regulatory or institutional, not technical. Credit
+  rating agencies are embedded in regulatory capital rules (Basel III, SEC
+  requirements). Index providers are embedded in benchmark licensing
+  agreements. Consulting firms are embedded in ongoing engagement
+  relationships.
 
-- Error cost can be extreme even without software integration: a rating downgrade
-  carries legal and market consequences comparable to FDA pharma errors.
+- Error cost can be extreme even without software integration: a rating
+  downgrade carries legal and market consequences comparable to FDA pharma
+  errors.
 
-- Data moats are often HIGHER than software firms: credit bureau data is legally
-  mandated (lenders must report), index franchises took decades to establish,
-  proprietary research data has no public equivalent.
+- Data moats are often HIGHER than software firms: credit bureau data is
+  legally mandated (lenders must report), index franchises took decades to
+  establish, proprietary research data has no public equivalent.
 
-Consequently, firms like MCO, SPGI, MSCI can score δ_composite ∈ [0.7, 0.9]
-even though they are not traditional software firms. The scoring rubric applies
-unchanged — just recognize that "switching cost" and "error cost" manifest
-differently in institutional/regulatory contexts.
-
-Education platforms (COUR, CHGG) are the OPPOSITE: learners can switch to ChatGPT
-for homework help with near-zero friction. Score accordingly low.
+Score these firms using the same rubric — recognize that "switching cost"
+and "error cost" manifest through regulatory/institutional channels rather
+than technical integration. Consumer-facing education platforms (homework
+help, MOOCs) represent the OPPOSITE profile: direct substitution by
+consumer LLMs for the core task, near-zero customer switching friction,
+minimal proprietary data moat.
 
 ═══════════════════════════════════════════════════════════════
-CALIBRATION ANCHORS
+SUB-SCORE REASONING EXAMPLES
 ═══════════════════════════════════════════════════════════════
 
-Use these as ground truth for your calibration:
+The following examples illustrate how the 6-level rubrics apply to
+specific firms. They demonstrate the reasoning pattern (which switching
+cost mechanisms dominate, what drives error cost, how data moats arise)
+— they are NOT numeric calibration targets. Your sub-scores must emerge
+from rubric matching, not from trying to reproduce these examples.
+These examples span three firm types:
 
-ZSCALER (ZS) → δ_switch=0.8, δ_error=0.8, δ_data=0.2 → δ_composite=0.60
+  Software firms (SaaS, infrastructure, security)
+  Knowledge-intensive services (ratings, indices, education)
+  Physical products (pharmaceuticals)
+
+ZSCALER (ZS) — zero-trust network security
 Zero-trust network security embedded in corporate network architecture. Ripping out
 ZS requires re-architecting network security — extreme technical switching cost.
 Security errors can cause breaches with severe regulatory/reputational consequences.
 No significant proprietary data moat; security intelligence is industry-shared.
 
-DATADOG (DDOG) → δ_switch=0.6, δ_error=0.4, δ_data=0.2 → δ_composite=0.40
+DATADOG (DDOG) — infrastructure observability
 Observability platform embedded in engineering workflows. Moderate-high switching cost
 (integrations across entire infrastructure stack). Error cost is moderate — missed
 alerts cause incidents but are recoverable. No proprietary data moat; telemetry data
 belongs to customers.
 
-VEEVA SYSTEMS (VEEV) → δ_switch=1.0, δ_error=1.0, δ_data=0.6 → δ_composite=0.87
+VEEVA SYSTEMS (VEEV) — pharma regulatory cloud
 Pharma regulatory cloud with FDA validation requirements. Switching requires
 re-validating entire regulated workflow — effectively impossible during active trials.
 Error cost is extreme (patient safety, FDA penalties). Accumulated clinical/commercial
 data in pharma context is significant but not fully exclusive.
 
-PAYCOM (PAYC) → δ_switch=0.6, δ_error=0.8, δ_data=0.1 → δ_composite=0.50
+PAYCOM (PAYC) — HCM/payroll platform
 HCM/payroll platform with multi-year enterprise contracts. Significant switching cost
 from payroll complexity and employee record migration. High error cost from payroll
 tax compliance — errors create IRS penalties and employee disputes. No proprietary
 data moat; payroll/HR data is customer-owned.
 
-HUBSPOT (HUBS) → δ_switch=0.4, δ_error=0.2, δ_data=0.3 → δ_composite=0.30
+HUBSPOT (HUBS) — CRM/marketing platform
 CRM/marketing platform with moderate stickiness. Switching is feasible in 3-6 months.
 Error cost is low — marketing campaign errors are correctable with no legal exposure.
 Moderate data moat from aggregated customer engagement benchmarks.
 
-LIVEPERSON (LPSN) → δ_switch=0.3, δ_error=0.1, δ_data=0.2 → δ_composite=0.20
+LIVEPERSON (LPSN) — conversational AI platform
 Conversational AI platform that can be replaced quickly. Low switching cost and very
 low error cost — a suboptimal chatbot response is easily corrected. Minimal data moat.
 
-ZIPRECRUITER (ZIP) → δ_switch=0.1, δ_error=0.1, δ_data=0.7 → δ_composite=0.30
+ZIPRECRUITER (ZIP) — online job marketplace
 Job marketplace with essentially zero switching cost for employers. Low error cost
 for resume screening (errors are part of the hiring process). Strong data/network
 moat from 50M+ jobseeker network — competitors need years to match candidate density.
 
-MOODY'S (MCO) → δ_switch=0.9, δ_error=1.0, δ_data=0.9 → δ_composite=0.933
+MOODY'S (MCO) — credit rating agency
 Credit rating agency with NRSRO regulatory certification. Switching cost is extreme
 because lenders and regulators require ratings from designated NRSROs (mandatory
 by regulation for certain capital calculations). Error cost is extreme — rating
 errors create legal liability and market dislocation. Data moat is extreme —
 historical rating data with mandatory issuer disclosure is effectively irreplicable.
 
-S&P GLOBAL (SPGI) → δ_switch=0.8, δ_error=0.9, δ_data=0.9 → δ_composite=0.867
+S&P GLOBAL (SPGI) — ratings + benchmark indices
 Ratings + benchmark indices. Switching cost is very high — indices are embedded
 in ETF licensing, benchmarks, and trading infrastructure. Error cost is near-extreme
 for ratings, very high for index calculation errors. Data moat is extreme —
 historical ratings and index data with no public equivalent.
 
-MSCI (MSCI) → δ_switch=0.7, δ_error=0.7, δ_data=0.8 → δ_composite=0.733
+MSCI (MSCI) — investment indices + ESG analytics
 Investment indices + ESG analytics. Switching cost high from benchmark licensing
 contracts with ETFs and portfolio managers. Error cost high for index
 discontinuities. Data moat strong — index methodologies and ESG data with
 long history.
 
-CHEGG (CHGG) → δ_switch=0.1, δ_error=0.1, δ_data=0.1 → δ_composite=0.100
+CHEGG (CHGG) — homework help platform
 Homework help platform facing direct LLM substitution (ChatGPT can answer the same
 questions). Switching cost is near-zero — students can abandon the subscription
 instantly. Error cost is near-zero — wrong homework answer has no legal/regulatory
 consequence. Data moat is minimal — student Q&A data is not uniquely proprietary.
 
-COURSERA (COUR) → δ_switch=0.4, δ_error=0.3, δ_data=0.2 → δ_composite=0.300
+COURSERA (COUR) — online education platform
 Online education platform with moderate stickiness from university partnerships
 and credentials. Moderate switching cost — enrolled students completing credentials
 face sunk-cost friction. Low error cost — course content errors cause academic
 dissatisfaction but no legal liability. Low-moderate data moat.
 
-PFIZER (PFE) → δ_switch=0.5, δ_error=1.0, δ_data=0.3 → δ_composite=0.600
+PFIZER (PFE) — pharmaceutical manufacturer
 Pharmaceutical manufacturer. Switching cost is moderate — prescribers can shift
 to generics or competing brands when patents expire. Error cost is extreme —
 drug errors cause patient harm and FDA liability. Data moat is moderate from
@@ -300,6 +377,7 @@ Return ONLY valid JSON. No text before or after the JSON object.
 CRITICAL RULES:
 - Each sub-score must be one of: 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0
 - δ_composite = (δ_switch + δ_error + δ_data) / 3, rounded to 3 decimal places
+- Each sub-score must be computed deterministically from the 6-level rubric — do not adjust
 - Cite specific product features or firm details in reasoning — do NOT cite author names
 - Score the firm's core product regardless of customer type (B2B, B2C, or mixed)
-- Anchor to calibration examples. If a firm resembles VEEV, score accordingly.
+- Examples above are illustrative reasoning patterns, not calibration targets
