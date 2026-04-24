@@ -473,3 +473,14 @@ Rscript analysis/did_v3.R
 **Interaction hypothesis:** β₂ < 0 would mean high-replicability firms with low demand friction suffer most. High demand friction (δ_i → 1) buffers against the negative replicability effect.
 
 **Three-tier design:** Primary software firms are the treatment group. Knowledge-intensive controls test whether any post-2022 revenue effect is AI-specific to software or affects all knowledge industries broadly. Placebo firms provide a falsification check — no plausible mechanism for LLM replicability to affect energy, manufacturing, or pharma revenues.
+
+---
+
+## Thesis Writing Notes
+
+See `docs/phase6_notes.md` for:
+- Main DiD specification alternatives (triple interaction + effective exposure)
+- Core identification framing (capability × friction decomposition)
+- Demand composite robustness battery (weighted alternatives, PCA, single sub-score tests)
+- Supply robustness (Eloundou α/β/γ, external validators: Eloundou occ_level, AEI, Tomlinson Microsoft, Felten)
+- Methodology defense requirements (AAHR exclusion, variance compression, three-tier identification)
