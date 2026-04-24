@@ -5,6 +5,14 @@ Your task: Score a firm's product on LLM replicability by
 decomposing what the product does into customer-facing tasks, classifying
 each task, and computing an exposure score.
 
+IMPORTANT METHODOLOGICAL CONSTRAINT
+═══════════════════════════════════════════════════════════════
+Do not target any expected score. Anchor examples shown below are
+illustrative only and must not be treated as numeric calibration
+targets. Your score must emerge solely from task classification
+and the aggregation formula. Do not adjust, compensate, or
+calibrate toward any particular value.
+
 ═══════════════════════════════════════════════════════════════
 THEORETICAL FOUNDATION
 ═══════════════════════════════════════════════════════════════
@@ -166,8 +174,7 @@ When uncertain between E1 and E0:
   IF task can work on a snapshot or historical export → E1 or E2
   IF physical hardware must be present/controlled → E0
   IF task is text-based but inside a heavily regulated workflow → E1
-     (regulation does not make a text task E0; it lowers normalized score
-      through the integration depth penalty — see Step 4)
+     (regulation does not make a text task E0)
   IF switching costs are very high → still E1/E2 if tasks are text-based
      (switching costs affect economic impact, not task classification)
 
@@ -177,171 +184,137 @@ If the product is clearly language/document/communication: assign mostly E1.
 Do NOT split evenly just to appear balanced when evidence points to an extreme.
 
 ═══════════════════════════════════════════════════════════════
-STEP 4 — ASSESS INTEGRATION DEPTH PENALTY (0 / -1 / -2)
-═══════════════════════════════════════════════════════════════
-
-After classifying tasks, assess whether the product has a structural
-integration moat that reduces effective substitutability even for E1 tasks.
-
-Score the integration depth penalty:
-
-  0  — No significant moat. Product operates independently or via
-       standard integrations. A customer could switch to an LLM-based
-       substitute with minimal friction.
-
- -1  — Moderate moat. Product is embedded in enterprise workflows with
-       meaningful switching costs, but the integration itself is not the
-       primary value. Customers could switch in 6-18 months.
-       Examples: payroll/HCM software, mid-market CRM, ITSM platforms
-
- -2  — Strong moat. The product IS the integration — deep proprietary
-       connectors, years of accumulated customer-specific data, or
-       regulatory certification that cannot be quickly replicated.
-       Examples: core banking, semiconductor EDA, pharma regulatory cloud
-
-═══════════════════════════════════════════════════════════════
-STEP 5 — COMPUTE SCORES
+STEP 4 — COMPUTE SCORES
 ═══════════════════════════════════════════════════════════════
 
 Compute the following and include in your output:
 
-  raw_exposure      = (E1_count + 0.5 × E2_count) / n_tasks
-  adjusted_exposure = max(0.0, raw_exposure + integration_depth_penalty / 10)
-  normalized_score  = round(adjusted_exposure × 99 + 1, 1)
+  raw_exposure     = (E1_count + 0.5 × E2_count) / n_tasks
+  normalized_score = round(raw_exposure × 99 + 1, 1)
 
 E2 receives half weight: requires additional engineering effort to replicate.
-Integration penalty reduces score for firms with deep structural moats.
-normalized_score is bounded [1, 100].
+normalized_score is bounded [1, 100] and emerges directly from task classification.
 
 ═══════════════════════════════════════════════════════════════
-CALIBRATION ANCHORS
+TASK DECOMPOSITION EXAMPLES
 ═══════════════════════════════════════════════════════════════
 
-Use these as ground truth. Your task classifications should produce
-normalized scores close to these values.
+The following examples illustrate how product task decomposition
+and E0/E1/E2 classification apply across different firm types.
+They teach classification logic — not score targets.
+These examples span three firm types in our dataset:
 
-ZSCALER (ZS) → normalized ≈ 10
+  Software firms (SaaS, infrastructure, security)
+  Knowledge-intensive services (ratings, indices, education)
+  Physical products (pharmaceuticals, manufacturing)
+
+ZSCALER (ZS) — zero-trust network security
 Zero-trust network security: real-time packet inspection, network traffic
 analysis, threat detection from live streams, sub-ms policy enforcement.
 Tasks: [real-time traffic inspection E0, zero-trust policy enforcement E0,
 threat intelligence from live feeds E0, certificate management E0,
 network access control E0, admin portal management E2]
-Moat penalty: -2 (core network infrastructure)
 
-DATADOG (DDOG) → normalized ≈ 16
+DATADOG (DDOG) — infrastructure observability
 Infrastructure observability: real-time metrics ingestion, anomaly
 detection on live streams, distributed tracing, alerting infrastructure.
 Tasks: [ingest real-time infrastructure metrics E0, detect anomalies in
 live streams E0, correlate distributed traces E0, generate live alerts E0,
 aggregate historical logs E2, generate incident summaries E1]
-Moat penalty: -1
 
-CROWDSTRIKE (CRWD) → normalized ≈ 22
+CROWDSTRIKE (CRWD) — endpoint security
 Endpoint security: real-time threat detection via kernel-level agents,
 behavioral AI on live telemetry, incident response coordination.
 Tasks: [deploy endpoint detection agents E0, monitor live behavioral
 telemetry E0, detect threats in real-time E0, contain active incidents E0,
 generate threat intelligence reports E1, manage security policies E2]
-Moat penalty: -2
 
-VEEVA (VEEV) → normalized ≈ 38
+VEEVA (VEEV) — life sciences cloud
 Life sciences cloud: pharma CRM with regulatory submission management,
 clinical data, deep ERP integration, validation requirements.
 Tasks: [manage pharma commercial content E1, track regulatory submissions E1,
 manage clinical trial data E2, maintain validated system documentation E1,
 integrate with lab systems E0, generate regulatory reports E1]
-Moat penalty: -2 (pharma regulatory certification)
 
-PAYCOM (PAYC) → normalized ≈ 45
+PAYCOM (PAYC) — HCM/payroll SaaS
 HCM/payroll SaaS: payroll calculation, compliance, benefits admin,
 talent management — text-heavy but deep compliance integration.
 Tasks: [process payroll with tax compliance E1, manage employee records E1,
 administer benefits enrollment E1, track time and attendance E2,
 generate compliance reports E1, integrate with GL systems E2]
-Moat penalty: -1
 
-HUBSPOT (HUBS) → normalized ≈ 64
+HUBSPOT (HUBS) — CRM/marketing platform
 CRM/marketing platform: email campaigns, pipeline management, contact
 records, marketing automation — core is written communication.
 Tasks: [draft and send marketing emails E1, manage contact records E1,
 track sales pipeline E1, score and route leads E1, generate campaign
 reports E1, integrate with other systems E2]
-Moat penalty: -1
 
-LIVEPERSON (LPSN) → normalized ≈ 72
+LIVEPERSON (LPSN) — conversational AI platform
 Conversational AI platform: customer support via chat/messaging,
 intent classification, automated conversation routing.
 Tasks: [manage customer conversations via chat E1, classify customer
 intent E1, route conversations to agents E1, generate automated
 responses E1, analyze conversation transcripts E1, integrate with
 CRM systems E2]
-Moat penalty: 0
 
-EGAIN (EGAN) → normalized ≈ 80
+EGAIN (EGAN) — knowledge management
 Knowledge management: knowledge base authoring, customer self-service
 answers, agent-assist content, guided workflows.
 Tasks: [author and maintain knowledge articles E1, answer customer queries
 from knowledge base E1, recommend relevant content to agents E1,
 generate guided resolution workflows E1, manage content versions E1]
-Moat penalty: 0
 
-ZIPRECRUITER (ZIP) → normalized ≈ 88
+ZIPRECRUITER (ZIP) — online job marketplace
 Online job marketplace: job-candidate matching, resume screening,
 employer-candidate messaging, job distribution.
 Tasks: [match candidates to job listings E1, screen and rank resumes E1,
 facilitate employer-candidate messaging E1, distribute job listings E1,
 generate candidate recommendations E1, categorize job postings E1]
-Moat penalty: 0
 
-MOODY'S (MCO) → normalized ≈ 30
+MOODY'S (MCO) — credit ratings + analytical products
 Credit ratings + analytical products: regulated credit rating issuance, analytical
 data services, research publishing, financial data feeds.
 Tasks: [issue and maintain credit ratings E1, publish research reports E1, deliver
 structured financial data feeds E2, regulatory compliance for ratings E0, maintain
 historical ratings database E2, generate investor communications E1]
-Moat penalty: -2 (NRSRO regulatory certification; ratings are legally mandated)
 
-S&P GLOBAL (SPGI) → normalized ≈ 35
+S&P GLOBAL (SPGI) — ratings + indices + market intelligence
 Ratings + indices + market intelligence: credit ratings (S&P), equity/fixed income
 indices (S&P 500, Dow Jones), commodities pricing (Platts), corporate research.
 Tasks: [issue credit ratings E1, calculate and disseminate indices E0, publish
 research reports E1, deliver market data feeds E0, maintain index licensing E2,
 regulatory compliance for ratings and indices E0]
-Moat penalty: -2 (regulatory + benchmark franchise moats)
 
-MSCI (MSCI) → normalized ≈ 40
+MSCI (MSCI) — investment indices + ESG ratings
 Investment indices + ESG ratings + portfolio analytics: index calculation, ESG scoring,
 risk modeling, portfolio construction tools.
 Tasks: [calculate and maintain indices E0, produce ESG research and ratings E1,
 publish portfolio risk analytics E2, deliver real-time market data E0, maintain
 analytical models E2, generate client research E1]
-Moat penalty: -1 (benchmark licensing + methodology moat)
 
-COURSERA (COUR) → normalized ≈ 60
+COURSERA (COUR) — online education marketplace
 Online education marketplace: course content delivery, learner-instructor matching,
 credential issuance, learning analytics.
 Tasks: [deliver video lecture content E0, facilitate learner-instructor interaction E1,
 generate personalized course recommendations E1, assess quizzes and assignments E1,
 issue course credentials E2, match learners to career pathways E1]
-Moat penalty: 0
 
-CHEGG (CHGG) → normalized ≈ 75
+CHEGG (CHGG) — homework help and textbook services
 Homework help and textbook services: Q&A platform with expert-authored answers,
 textbook rental, writing assistance, tutoring marketplace.
 Tasks: [answer homework questions from knowledge base E1, match students to
 answers/tutors E1, generate writing feedback and citations E1, produce study
 materials and summaries E1, manage textbook rental transactions E2,
 facilitate peer Q&A community E1]
-Moat penalty: 0 (direct LLM substitution threat, no integration moat)
 
-PFIZER (PFE) → normalized ≈ 5
+PFIZER (PFE) — pharmaceutical manufacturer
 Pharmaceutical manufacturer: drug discovery/development, manufacturing at scale,
 regulatory approval (FDA), commercial distribution through clinics and patients.
 Tasks: [discover and develop drug compounds E0, conduct clinical trials E0,
 manufacture pharmaceuticals at scale E0, navigate FDA regulatory approval E0,
 distribute drugs through clinical and retail channels E0, manage post-market
 pharmacovigilance E0]
-Moat penalty: -2 (FDA certification, patents, physical manufacturing)
 
 ═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT
@@ -360,15 +333,13 @@ Return ONLY valid JSON. No text before or after the JSON object.
   "e1_count": 3,
   "e2_count": 1,
   "n_tasks": 6,
-  "integration_depth_penalty": -1,
   "raw_exposure": 0.583,
-  "adjusted_exposure": 0.483,
-  "normalized_score": 48.8,
-  "reasoning": "2-3 sentences describing what the product does, what determines its exposure profile, and why the integration depth penalty is what it is. Cite actual product tasks — do NOT cite author names."
+  "normalized_score": 58.7,
+  "reasoning": "2-3 sentences describing what the product does and what determines its exposure profile. Cite actual product tasks — do NOT cite author names."
 }
 
 CRITICAL OUTPUT RULES:
 - n_tasks must equal e0_count + e1_count + e2_count
-- integration_depth_penalty must be 0, -1, or -2
 - normalized_score must be between 1 and 100
+- normalized_score must be computed deterministically from the formula — do not adjust
 - Cite product tasks in reasoning, not author names
