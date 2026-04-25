@@ -61,7 +61,12 @@ PRICE_CACHE_READ_PER_MTOK     = 0.10
 _RETRY_DELAYS_API = (1, 4, 16)   # API errors: 429, 5xx
 _DEFAULT_MAX_TOKENS = 2000
 _DEFAULT_TEMPERATURE = 0.0
-_CACHE_READ_RATIO_FLOOR = 0.85   # subsequent-call cache assertion threshold
+# Subsequent-call cache assertion: cache_read must be at least this fraction
+# of the cache_creation observed on the FIRST call for the same prompt.
+# This is an absolute-tokens check, not a ratio over total input — firm text
+# (user message) varies per call and is uncached by design, so it must be
+# excluded from the cache health check.
+_CACHE_READ_FRACTION_OF_FIRST_CALL = 0.95
 
 
 # =============================================================================
@@ -106,9 +111,11 @@ _client = anthropic.Anthropic(api_key=_API_KEY)
 # =============================================================================
 # Module-level state
 # =============================================================================
-# Tracks whether we've seen a first call for each unique system prompt hash.
+# Tracks first-call cache size for each unique system prompt hash.
+# {prompt_hash: cache_creation_tokens_observed_on_first_call}
+# Used by _verify_cache to assert subsequent-call cache_read matches.
 # Single-process scoring is the only intended use; this is not thread-safe.
-_cache_state: dict[str, bool] = {}
+_cache_state: dict[str, int] = {}
 
 # Cumulative cost across all score_firm() calls in this process.
 _cumulative_cost: float = 0.0
@@ -220,7 +227,13 @@ def score_firm(
                 ticker=ticker,
                 system_prompt_chars=len(system_prompt),
             )
-        _cache_state[prompt_hash] = True
+        # Mark prompt as seen even if verify_cache=False. When verify_cache=True,
+        # _verify_cache writes cache_creation tokens to _cache_state[prompt_hash]
+        # for subsequent-call assertions. When verify_cache=False, we record
+        # cache_creation here so any later call with verify_cache=True still has
+        # the first-call size on hand.
+        if prompt_hash not in _cache_state:
+            _cache_state[prompt_hash] = cache_creation if cache_creation > 0 else 1
         is_first_call_for_prompt = False
 
         total_input_side = input_tokens + cache_creation + cache_read
@@ -365,12 +378,15 @@ def _verify_cache(
     First call for a prompt:
         cache_creation_input_tokens MUST be > 0.
         If 0, the system prompt is below Haiku 4.5's 4,096-token cache minimum
-        and caching silently failed.
+        and caching silently failed. Records cache_creation in _cache_state
+        for use in subsequent-call assertions.
 
     Subsequent calls:
-        cache_read_input_tokens / total_input_side MUST be > 0.85.
-        If lower, the cache was silently invalidated (TTL expiry, prompt drift,
-        or workspace-level isolation issue from the Feb 2026 Anthropic change).
+        cache_read MUST be at least 95% of the cache size observed on the
+        first call (i.e., the system prompt cache is being read back in full).
+        This is an ABSOLUTE-tokens check, not a ratio. Firm text (user message)
+        is uncached by design and varies per call, so it cannot be in the
+        denominator of any cache health check.
 
     Mid-run cache write detection:
         Subsequent calls with cache_creation > 0 are logged as warnings.
@@ -386,25 +402,35 @@ def _verify_cache(
                 f"Fix: pad the system prompt in prompts/*.txt — Sonnet's lower 1,024 minimum "
                 f"is not an option per repo rules (Haiku 4.5 only)."
             )
+        # Record cache size for subsequent-call assertions
+        _cache_state[prompt_hash] = cache_creation
         logger.info(
             f"{ticker}  CACHE WRITE OK  prompt_hash={prompt_hash}  "
             f"cache_creation={cache_creation} tokens"
         )
     else:
-        total_input_side = input_tokens + cache_creation + cache_read
-        if total_input_side == 0:
-            raise CacheVerificationError(
-                f"{ticker}: zero total input-side tokens reported by API"
+        expected_size = _cache_state.get(prompt_hash, 0)
+        if expected_size == 0:
+            # Should not happen: is_first_call=False but no first-call record.
+            # Defensive fallback — treat this call as if it were the first.
+            logger.warning(
+                f"{ticker}: subsequent call but no first-call cache size recorded "
+                f"for prompt_hash {prompt_hash}. Recording {cache_creation} now."
             )
-        cache_read_ratio = cache_read / total_input_side
+            _cache_state[prompt_hash] = cache_creation
+            return
 
-        if cache_read_ratio < _CACHE_READ_RATIO_FLOOR:
+        # Cache size is established. Subsequent calls should read back the
+        # full cache (or essentially full — within fractional tolerance).
+        min_acceptable = _CACHE_READ_FRACTION_OF_FIRST_CALL * expected_size
+        if cache_read < min_acceptable:
             raise CacheVerificationError(
                 f"Cache miss on subsequent call for prompt_hash {prompt_hash} "
-                f"(ticker={ticker}). cache_read_ratio={cache_read_ratio:.3f} "
-                f"< floor={_CACHE_READ_RATIO_FLOOR}. "
-                f"Tokens: cache_read={cache_read} cache_write={cache_creation} "
-                f"input={input_tokens}. "
+                f"(ticker={ticker}). "
+                f"cache_read={cache_read} tokens, expected at least "
+                f"{min_acceptable:.0f} ({_CACHE_READ_FRACTION_OF_FIRST_CALL*100:.0f}% of "
+                f"first-call size {expected_size}). "
+                f"cache_creation_this_call={cache_creation}, input_this_call={input_tokens}. "
                 f"Likely cause: 5-min TTL expired between calls (>300s gap), "
                 f"or system prompt content changed between calls. "
                 f"For full runs >5 min, pass verify_cache=False to score_firm()."
