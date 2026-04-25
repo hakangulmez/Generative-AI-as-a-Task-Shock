@@ -195,7 +195,7 @@ The supply and demand scoring scores emerge *deterministically* from rubric matc
 - `prompts/supply_rho_system.txt`: 345 lines, 19,891 chars (~4,200 tokens)
 - `prompts/demand_delta_system.txt`: 386 lines, 23,059 chars (~4,900 tokens)
 
-Both comfortably above the 1,024-token prompt caching threshold. Cache hit cost per firm: ~$0.0004 (supply) + ~$0.0005 (demand).
+Supply (~4,200 tokens) is just above the 4,096-token Haiku 4.5 cache minimum; demand (~4,900 tokens) clears it comfortably. The Sonnet minimum is 1,024 tokens but Sonnet is not used in this pipeline. Cache hit cost per firm: ~$0.0004 (supply) + ~$0.0005 (demand).
 
 ---
 
