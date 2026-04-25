@@ -1,7 +1,7 @@
 # Generative AI as a Task Shock
 ### Product-Level LLM Substitution in B2B Software Markets
 
-**Master's Thesis** · TUM School of Management · M.Sc. Management & Technology  
+**Master's Thesis** · TUM School of Management · M.Sc. Management & Technology
 **Author:** Hakan Zeki Gülmez · **Supervisor:** Prof. Dr. Helmut Farbmacher · **Submission:** October 2026
 
 ---
@@ -15,29 +15,35 @@ Do B2B software firms whose products are more replicable by LLMs experience wors
 ln(Revenue_it) = α_i + δ_t + β · (Post_t × ρ_i) + ε_it
 ```
 
-**Extended specification with demand-side moderator:**
+**Extended specification with demand-side moderator (triple interaction):**
 ```
-ln(Revenue_it) = α_i + δ_t + β₁·(Post_t × ρ_i) + β₂·(Post_t × ρ_i × δ_i) + ε_it
+ln(Revenue_it) = α_i + δ_t + β1·(ρ_i × Post_t) + β2·(δ_i × Post_t)
+                 + β3·(ρ_i × δ_i × Post_t) + ε_it
 ```
 
 Two-way fixed effects DiD. `ρ_i` = product-level LLM replicability score ∈ [1, 100]. `δ_i` = demand-side friction score ∈ [0, 1]. `Post_t = 1` for 2022Q4 onward (`period_end ≥ 2022-10-01`). Inference via wild cluster bootstrap (WCB), clustered at firm level.
 
-**Three-tier sample (321 firms):** 256 primary B2B software firms (SIC 7370–7379) as the treatment group, 35 knowledge-intensive service firms as controls, and 30 placebo firms (energy, manufacturing, payments, pharma) for falsification.
+**Core identification:** Occupation-level AI exposure measures uniformly predict high impact for knowledge workers, yet observed firm revenue responses are highly heterogeneous. This framework resolves that tension by separating what LLMs *can* do (supply `ρ`) from what customers *will* accept (demand `δ`). High capability does not imply high impact — impact emerges when replicability coincides with low friction. Interaction coefficient `β3 > 0` would confirm friction buffers the negative effect.
+
+**Three-tier sample (321 firms):** 256 primary B2B software firms (SIC 7370–7379) as the treatment group, 35 knowledge-intensive service firms as controls (rating agencies, index providers, education platforms, consulting), and 30 placebo firms (energy, manufacturing, payments, pharma) for falsification.
 
 ---
 
 ## Pipeline Status
 
+All data panels are built. Phase 3 prompt engineering is complete. Phase 4 (API scoring) is the next active stage.
+
 | Step | Script | Output | Status |
 |------|--------|--------|--------|
 | 1. Firm universe | `01_build_firm_universe.py` | `data/raw/firm_universe.csv` | Done — 321 firms (3 tiers) |
-| 2. 10-K Item 1 extraction | `02_collect_10k_text.py` | `text_data/10k_extracts/*.txt` | Done — 319/321 in-universe firms |
-| 3. Financial panel | `03_build_financial_panel.py` | `data/processed/financial_panel.csv` | Done — 321 firms, 61,857 obs (10 metrics) |
+| 2. 10-K Item 1 extraction | `02_collect_10k_text.py` | `text_data/10k_extracts/*.txt` | Done — 321/321 firms |
+| 3. Financial panel | `03_build_financial_panel.py` | `data/processed/financial_panel.csv` | Done — 321 firms, 61,857 obs |
 | 4. RPO panel | `04_build_rpo_quarterly.py` | `data/processed/rpo_quarterly.csv` | Done — 279/291 attempted firms |
 | 5. Billings panel | `05_build_billings_panel.py` | `data/processed/billings_panel.csv` | Done — 321 firms, 8,207 rows |
 | 6. Margin panel | `06_build_margin_panel.py` | `data/processed/margin_panel.csv` | Done — 321 firms, 41,960 rows |
 | 7. AI mention panel | `07_build_ai_mention_panel.py` | `data/processed/ai_mention_panel.csv` | Done — 321 firms, 8,437 filings |
-| 8. Supply scoring (ρ_i) | `08_score_supply_rho.py` | `data/processed/lit_scores.csv` | **Pending** — Phase 3 prompt rewrite first |
+| Phase 3: prompt engineering | `prompts/*.txt` | — | Done — Apr 2026 |
+| 8. Supply scoring (ρ_i) | `08_score_supply_rho.py` | `data/processed/lit_scores.csv` | Pending — Phase 4 |
 | 9. Demand scoring (δ_i) | `09_score_demand_delta.py` | `data/processed/demand_friction.csv` | Pending — after step 8 |
 | 10. DiD regressions | `analysis/did_v3.R` | — | Pending — after steps 8–9 |
 
@@ -54,25 +60,29 @@ scripts/
   05_build_billings_panel.py    # Billings = revenue + gap-aware rpo_delta
   06_build_margin_panel.py      # 5 margin/intensity ratios from financial_panel, P1/P99 winsorized
   07_build_ai_mention_panel.py  # AI mention counts from 10-K/10-Q full filing text
-  08_score_supply_rho.py        # Supply-side LLM replicability scoring via Claude API
-  09_score_demand_delta.py      # Demand-side friction scoring via Claude API
+  08_score_supply_rho.py        # Supply-side LLM replicability scoring via Claude API (Phase 4)
+  09_score_demand_delta.py      # Demand-side friction scoring via Claude API (Phase 4)
 
   utils/
     edgar.py                    # EDGAR client: submissions, companyfacts, filing text
     xbrl.py                     # XBRL extraction, Q4 formula, RPO fallback chain
     text_sections.py            # 10-K section parser (Item 1 extraction + iXBRL)
-    llm_client.py               # LLM client with prompt caching (not yet created)
+    llm_client.py               # LLM client with prompt caching (Phase 4 first deliverable)
+    logging_setup.py            # Structured logging
 
 analysis/
   did_v3.R                      # Two-way FE DiD + WCB inference (fixest + fwildclusterboot)
 
 prompts/
-  supply_rho_system.txt         # Supply-side scoring prompt (E0/E1/E2 framework)
-  demand_delta_system.txt       # Demand-side scoring prompt (δ_switch/δ_error/δ_data)
+  supply_rho_system.txt         # Supply-side scoring prompt (E0/E1/E2 framework, pure Eloundou β)
+  demand_delta_system.txt       # Demand-side scoring prompt (δ_switch/δ_error/δ_data, 6-level rubric)
+
+docs/
+  phase6_notes.md               # Thesis writing phase notes — robustness + methodology defense
 
 config/
   ai_mention_lexicon.yaml       # 22-pattern post-ChatGPT AI mention lexicon
-  anchor_firms.yaml             # 14 supply + 12 demand calibration anchors
+  anchor_firms.yaml             # Calibration anchors (structure under review for Phase 4)
   shock_dates.yaml              # Shock date configuration (2022-10-01)
   universe_filters.yaml         # SIC codes, exchange filters, coverage thresholds
   universe_tickers.yaml         # Explicit ticker lists per tier
@@ -86,14 +96,14 @@ data/
     billings_panel.csv          # 321 firms, 8,207 rows (revenue + gap-aware rpo_delta)
     margin_panel.csv            # 321 firms, 41,960 rows (5 ratios, P1/P99 winsorized)
     ai_mention_panel.csv        # 321 firms, 8,437 filings (AI mentions by category)
-    lit_scores.csv              # Supply scores (ρ_i) — from 08_score_supply_rho.py
-    demand_friction.csv         # Demand scores (δ_i) — from 09_score_demand_delta.py
+    lit_scores.csv              # Supply scores (ρ_i) — produced by 08_score_supply_rho.py in Phase 4
+    demand_friction.csv         # Demand scores (δ_i) — produced by 09_score_demand_delta.py in Phase 4
 
 notebooks/
   thesis_notebook.ipynb         # All figures (the only place for figure code)
 
-text_data/10k_extracts/         # Extracted pre-shock 10-K Item 1 text (gitignored)
-text_data/10k10q_extracts/      # Full filing text cache for AI mention panel (gitignored)
+text_data/10k_extracts/         # Pre-shock 10-K Item 1 text (gitignored) — 321 files
+text_data/10k10q_extracts/      # Full filing text cache for AI mention panel (gitignored) — 8,437 files
 logs/                           # Pipeline logs (gitignored)
 ```
 
@@ -106,7 +116,7 @@ All data sourced exclusively from public SEC EDGAR APIs — no external data pro
 - **Firm universe:** SEC EDGAR submissions API — SIC 7370–7379 firms on NYSE/Nasdaq with ≥6 pre-shock XBRL quarters, plus curated knowledge and placebo tier additions
 - **Financial data:** SEC EDGAR companyfacts XBRL API — quarterly revenue, COGS, R&D, SG&A, SBC, and related metrics
 - **RPO data:** SEC EDGAR companyfacts XBRL API — balance-sheet stock of remaining performance obligations
-- **10-K text:** SEC EDGAR full-text search API — Item 1 Business Description, pre-shock filings only (filing date < 2022-11-01)
+- **10-K text:** SEC EDGAR full-text API — Item 1 Business Description, pre-shock filings only (filing date < 2022-11-01)
 
 ---
 
@@ -114,31 +124,30 @@ All data sourced exclusively from public SEC EDGAR APIs — no external data pro
 
 ### Supply Side: ρ_i — LLM Replicability Score ∈ [1, 100]
 
-Constructed by scoring each firm's pre-shock 10-K Item 1 Business Description using an adaptation of the Eloundou et al. (2024) "GPTs are GPTs" task-exposure framework — applied one level up the value chain at the product level rather than the worker level.
+Each firm's pre-shock 10-K Item 1 Business Description is scored using an adaptation of the Eloundou et al. (2024) "GPTs are GPTs" task-exposure framework, applied one level up the value chain at the product level rather than the worker level.
 
-Each firm's product is decomposed into 6–10 customer-facing tasks, classified as:
+The firm's product is decomposed into 6–10 customer-facing tasks, each classified as:
 - **E1** — direct LLM exposure: tasks whose output is primarily text, documents, communication, or text-based matching/ranking
 - **E2** — LLM + standard tools: tasks requiring database or API access before generating language output
 - **E0** — no meaningful LLM exposure: real-time data streams, physical hardware, sub-second latency SLA, or deep proprietary system integration as the core moat
 
-An integration depth penalty (0, −1, or −2) captures structural switching-cost moats that reduce effective substitutability even for E1/E2 tasks. The final score is:
+The final score is the Eloundou β aggregation applied at the product level:
 
 ```
-raw_exposure      = (E1_count + 0.5 × E2_count) / n_tasks
-adjusted_exposure = max(0.0, raw_exposure + penalty / 10)
-normalized_score  = round(adjusted_exposure × 99 + 1, 1)   ∈ [1, 100]
+raw_exposure     = (E1_count + 0.5 × E2_count) / n_tasks
+normalized_score = round(raw_exposure × 99 + 1, 1)   ∈ [1, 100]
 ```
 
-Fourteen calibration anchors span all three tiers — see `config/anchor_firms.yaml` for the full list with expected scores.
+Scores emerge deterministically from task classification. The scoring prompt includes a panel of 15 firms covering software, knowledge-intensive services, and placebo sectors as **task decomposition examples** — these teach classification logic (which tasks belong to E0, E1, or E2 for a given product type) but are not numeric calibration targets. The prompt explicitly forbids the model from targeting any expected score.
 
-**Scoring prompt:** `prompts/supply_rho_system.txt`  
+**Scoring prompt:** `prompts/supply_rho_system.txt`
 **Scoring script:** `scripts/08_score_supply_rho.py`
 
 ---
 
 ### Demand Side: δ_i — Customer Friction Score ∈ [0, 1]
 
-Constructed by scoring each firm's pre-shock 10-K text across three theoretically grounded dimensions:
+Constructed by scoring each firm's pre-shock 10-K text across three theoretically grounded dimensions, each on a 6-level rubric (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):
 
 **δ_switch — Switching Cost** (Farrell & Klemperer 2007): How difficult and costly is it for an existing customer to replace this product? Encompasses contractual lock-in, technical integration depth, organizational change costs, and data portability barriers.
 
@@ -150,9 +159,9 @@ Constructed by scoring each firm's pre-shock 10-K text across three theoreticall
 δ_composite = (δ_switch + δ_error + δ_data) / 3   ∈ [0, 1]
 ```
 
-Twelve calibration anchors span software and knowledge tiers — see `config/anchor_firms.yaml`.
+Each rubric level's descriptor includes 4–6 categorical cross-sector examples (e.g., "payroll/HCM platforms with tax jurisdiction configurations", "clinical data platforms embedded in FDA-regulated trial workflows", "actuarial databases with insurer pooling") — sector-level guidance rather than firm-specific anchor targets. A separate methodological note in the prompt addresses knowledge-intensive services, where switching cost manifests through regulatory or institutional channels rather than technical integration. Consumer-facing education platforms represent the opposite profile (near-zero friction).
 
-**Scoring prompt:** `prompts/demand_delta_system.txt`  
+**Scoring prompt:** `prompts/demand_delta_system.txt`
 **Scoring script:** `scripts/09_score_demand_delta.py`
 
 ---
@@ -229,25 +238,26 @@ Overlapping matches are deduplicated by position (longest match wins at each cha
 ## Running the Pipeline
 
 ```bash
-# Steps 1–7: Already complete. Do not re-run steps 1–4 (SEC rate limits).
+# Steps 1–7: Already complete. Do not re-run (SEC rate limits).
+# Phase 3 (prompt engineering): Already complete.
 
-# Pre-Phase 3: resolve missing pre-shock 10-K extracts for ACN and NWSA
-python3 scripts/02_collect_10k_text.py --tickers ACN NWSA
+# Phase 4, Step 1: write scripts/utils/llm_client.py
+# (not yet created — first Phase 4 deliverable)
 
-# Phase 3: prompt rewrites + placebo anchor addition (manual — no script)
-
-# Phase 4: supply-side scoring (requires ANTHROPIC_API_KEY)
+# Phase 4, Step 2: supply-side scoring (requires ANTHROPIC_API_KEY)
 export ANTHROPIC_API_KEY=sk-ant-...
-python3 scripts/08_score_supply_rho.py --test           # validate 14 anchors first (~$0.50)
+python3 scripts/08_score_supply_rho.py --test           # validate 15 anchor decompositions (~$0.50)
 python3 scripts/08_score_supply_rho.py --skip-existing  # full run (~$5)
 
-# Phase 4: demand-side scoring
-python3 scripts/09_score_demand_delta.py --test         # validate 12 anchors first
+# Phase 4, Step 3: demand-side scoring
+python3 scripts/09_score_demand_delta.py --test         # validate 13 anchor decompositions
 python3 scripts/09_score_demand_delta.py --skip-existing  # full run (~$5)
 
 # Phase 5: regressions
 Rscript analysis/did_v3.R
 ```
+
+Scoring uses `claude-haiku-4-5-20251001` with prompt caching enabled. Total scoring budget is ~$10 across 321 firms × 2 sides.
 
 ---
 
@@ -255,11 +265,11 @@ Rscript analysis/did_v3.R
 
 - **Pre-shock scoring only:** 10-K filings dated before 2022-11-01 ensure ρ_i and δ_i are not contaminated by post-shock firm adaptation to AI
 - **Three-tier design:** Software firms (treatment) + knowledge firms (spillover control) + placebo firms (falsification) allows testing whether any post-2022 revenue effect is specific to LLM replicability or reflects broader knowledge-economy trends
+- **Deterministic rubric-based scoring:** Both supply and demand scores emerge from explicit rubric matching formulas applied to classifications made by the model on pre-shock text. No researcher-calibrated adjustment factors. Anchor firm examples in prompts teach classification logic, not numeric targets.
 - **IIIV excluded:** Post-privatization accounting restatements make its historical revenue unreliable
 - **Q4 revenue via formula:** XBRL quarterly tags are often absent for Q4; computing Q4 as `Annual − (Q1+Q2+Q3)` is standard and avoids a systematic gap in the panel
 - **Gap-aware billings:** RPO differences across annual gaps would attribute multi-quarter changes to a single quarter; the 120-day threshold prevents this contamination
 - **Strict AI mention lexicon:** Excluding generic pre-ChatGPT ML terms keeps the pre-shock baseline clean and avoids attenuation bias in the AI adoption proxy
-- **Interaction hypothesis:** β₂ < 0 would confirm that high-friction firms are buffered from the negative replicability effect — customers do not substitute even when they technically could
 
 ---
 
@@ -267,11 +277,13 @@ Rscript analysis/did_v3.R
 
 **Second-order displacement:** This paper studies AI displacing the software products that had themselves displaced workers from cognitive tasks in the 1990s–2000s. The Acemoglu–Restrepo (2022) task-substitution framework applies one level up the value chain: B2B software firms are *task externalizers* who face product obsolescence when LLMs can perform the same tasks at near-zero marginal cost.
 
-**Supply side (ρ_i):** Eloundou et al. (2024) "GPTs are GPTs" task exposure framework, applied to product-level tasks rather than worker tasks. A product whose core task bundle is E1/E2-exposed faces the same substitution pressure as a worker in an E1/E2 occupation.
+**Supply side (ρ_i):** Eloundou et al. (2024) "GPTs are GPTs" task exposure framework, applied to product-level tasks rather than worker tasks. A product whose core task bundle is E1/E2-exposed faces the same substitution pressure as a worker in an E1/E2 occupation. The β aggregation used (`E1 + 0.5·E2 / n_tasks`) is the middle of Eloundou's three aggregations; α (E1 only) and γ (E1 + E2) are reported as robustness.
 
 **Demand side (δ_i):** Even when a product is highly replicable, customers may not switch due to: (1) switching costs (Farrell & Klemperer 2007) — contractual, technical, organizational, and data portability barriers; (2) error costs (Agrawal, Gans & Goldfarb 2018) — regulatory, legal, and irreversibility consequences when AI makes mistakes; (3) data/network moats (Katz & Shapiro 1985; Rochet & Tirole 2003) — proprietary data accumulation and network effects that alternatives cannot replicate.
 
-**Interaction hypothesis:** β₂ < 0 would mean high-replicability firms with low demand friction suffer most. High demand friction (δ_i → 1) buffers against the negative replicability effect even for firms whose products are technically substitutable.
+**Interaction hypothesis:** `β3 > 0` in the triple-interaction DiD specification would confirm that high demand friction buffers high-replicability firms from revenue loss. Equivalently, the effective exposure channel is capability × (absence of friction), not capability alone.
+
+**Methodology notes:** The robustness battery, external validator plan (Eloundou `occ_level.csv`, Anthropic Economic Index, Microsoft Copilot applicability, Felten AIOE), and methodology defense coverage (AAHR exclusion problem, variance compression within SIC 7370-7379, three-tier identification) are documented in `docs/phase6_notes.md`.
 
 ---
 
@@ -281,3 +293,4 @@ Rscript analysis/did_v3.R
 - `text_data/`, `logs/`, `data/raw/` are gitignored — pipeline outputs are not version-controlled
 - All scoring uses pre-shock 10-K Item 1 text — scores must not be recomputed from later filings
 - All figures are generated in `notebooks/thesis_notebook.ipynb` — no standalone figure scripts
+- Scoring model is hard-pinned to `claude-haiku-4-5-20251001`; larger models would exceed the project budget
