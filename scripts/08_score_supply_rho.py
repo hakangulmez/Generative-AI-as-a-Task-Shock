@@ -13,8 +13,9 @@ Modes:
   --limit N        : score first N tickers from firm_universe (debug helper)
   --skip-existing  : skip tickers already present in output CSV
   --output PATH    : override default output path
-  --verify-cache   : enable cache assertions (default; pass --no-verify-cache
-                     for runs spanning >5 minutes where TTL expiry is expected)
+  --no-verify-cache : disable cache assertions (use for runs spanning
+                      >5 minutes where TTL expiry is expected; cache
+                      verification is on by default)
 
 Anchor checks (--test mode only) are SOFT pattern warnings:
   - real-time security firms (ZS, DDOG, CRWD) should land low (≤ 30)
@@ -48,7 +49,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils.llm_client import (
-    score_firm, aggregate_costs, get_cumulative_cost, reset_cumulative_state,
+    score_firm, aggregate_costs, reset_cumulative_state,
     LLMScoringError, CacheVerificationError,
 )
 from utils.schemas import SupplyScore
@@ -103,7 +104,7 @@ def load_prompt() -> str:
 
 
 def load_firm_text(ticker: str) -> str:
-    """Load pre-shock 10-K Item 1 for one ticker, with frontmatter stripped.
+    """Load Item 1 Business Description text for one ticker.
 
     The 02_collect_10k_text.py output format wraps content in:
         ---
@@ -112,17 +113,29 @@ def load_firm_text(ticker: str) -> str:
         ...
         ---
         ### ITEM_1_START ###
-        <body text>
+        <Item 1 body>
         ### ITEM_1A_START ###
-        ...
+        <Item 1A body>
+        ### ITEM_7_START ###
+        <Item 7 body>
 
-    We pass everything from "### ITEM_1_START ###" forward. Item 1A and
-    Item 7 are kept because the prompt explicitly instructs the model to
-    use Item 1 + Competition section (which often appears under Item 1A).
+    We extract ONLY the Item 1 section (between ### ITEM_1_START ### and
+    the next section marker, or end of file if Item 1A is absent).
 
-    No truncation is applied. Even MSFT/GOOG/AMZN with 100K+ char Item 1
-    content gets passed in full. Per-firm uncached input cost at 100K
-    chars (~25K tokens) is ~$0.025, well within the ~$10 total budget.
+    Methodology rationale: Item 1 (Business Description) is the canonical
+    source for product task identification under the Eloundou framework
+    applied at the product level. Item 1A (Risk Factors) introduces
+    "AI could disrupt our business"-style risk language that biases the
+    model toward higher exposure classifications. Item 7 (MD&A) is
+    financial commentary, not product description.
+
+    Empirical evidence (diagnostic 2026-04-25):
+        Item 1 mean: ~13K tokens (range: 1K to 174K)
+        Full body mean: ~62K tokens
+        Item 1 alone keeps full-run cost within ~$10 budget.
+
+    No truncation within Item 1 itself. Even GE's 174K-char Item 1 is
+    passed in full at ~$0.043/call uncached.
     """
     path = TEXT_DIR / f"{ticker}.txt"
     if not path.exists():
@@ -130,22 +143,44 @@ def load_firm_text(ticker: str) -> str:
 
     full = path.read_text(encoding="utf-8")
 
-    # Strip frontmatter: find the second '---' line, take everything after
-    lines = full.split("\n")
-    if lines[0].strip() == "---":
-        try:
-            second_marker = lines.index("---", 1)
-            body = "\n".join(lines[second_marker + 1:])
-        except ValueError:
-            # No closing '---' — pass full content
+    item1_marker = "### ITEM_1_START ###"
+    item1a_marker = "### ITEM_1A_START ###"
+    item7_marker = "### ITEM_7_START ###"
+
+    start_idx = full.find(item1_marker)
+    if start_idx == -1:
+        # No Item 1 marker found. Fall back to post-frontmatter body to
+        # avoid breaking firms with unusual extract formats.
+        lines = full.split("\n")
+        if lines and lines[0].strip() == "---":
+            try:
+                second_marker = lines.index("---", 1)
+                body = "\n".join(lines[second_marker + 1:])
+            except ValueError:
+                body = full
+        else:
             body = full
-    else:
-        body = full
+        if not body.strip():
+            raise RuntimeError(f"{path} has no Item 1 marker and empty body")
+        return body
 
-    if not body.strip():
-        raise RuntimeError(f"{path} has empty body after frontmatter strip")
+    # Item 1 starts after its marker line
+    body_start = start_idx + len(item1_marker)
 
-    return body
+    # Find the earliest subsequent section marker
+    end_candidates = []
+    for marker in (item1a_marker, item7_marker):
+        idx = full.find(marker, body_start)
+        if idx != -1:
+            end_candidates.append(idx)
+    body_end = min(end_candidates) if end_candidates else len(full)
+
+    item1_body = full[body_start:body_end].strip()
+
+    if not item1_body:
+        raise RuntimeError(f"{path} Item 1 section is empty")
+
+    return item1_body
 
 
 def load_anchor_tickers() -> list[str]:
@@ -214,19 +249,24 @@ def score_one_firm(
     tier: str,
     sector_code: str,
     system_prompt: str,
+    output_path: Path,
     verify_cache: bool,
-) -> tuple[bool, dict | None]:
-    """Score one firm. Returns (success, usage_record).
+) -> tuple[bool, dict | None, dict | None]:
+    """Score one firm. Returns (success, row, usage_record).
 
-    On success: appends row to OUTPUT_PATH, returns (True, usage_record).
-    On error: logs to ERROR_LOG_PATH, returns (False, None).
+    On success: appends row to output_path, returns (True, row, usage_record).
+    On error: logs to ERROR_LOG_PATH, returns (False, None, None).
+
+    The row dict is the same dict written to CSV — caller can use it for
+    downstream summaries (anchor pattern checks, console printing) without
+    re-reading the CSV from disk.
     """
     try:
         firm_text = load_firm_text(ticker)
     except (FileNotFoundError, RuntimeError) as exc:
         logger.warning(f"{ticker}: text load failed: {exc}")
         append_error(ERROR_LOG_PATH, ticker, "text_load_failed", str(exc))
-        return False, None
+        return False, None, None
 
     try:
         result, usage = score_firm(
@@ -246,11 +286,11 @@ def score_one_firm(
     except LLMScoringError as exc:
         logger.warning(f"{ticker}: scoring failed after retries: {exc}")
         append_error(ERROR_LOG_PATH, ticker, "scoring_failed", str(exc))
-        return False, None
+        return False, None, None
     except Exception as exc:
         logger.error(f"{ticker}: unexpected error: {type(exc).__name__}: {exc}")
         append_error(ERROR_LOG_PATH, ticker, type(exc).__name__, str(exc))
-        return False, None
+        return False, None, None
 
     # Build CSV row from validated SupplyScore + usage_record
     row = {
@@ -274,9 +314,9 @@ def score_one_firm(
         "retries_used": usage["retries_used"],
         "scored_at": datetime.now(timezone.utc).isoformat(),
     }
-    append_row(OUTPUT_PATH, row)
+    append_row(output_path, row)
 
-    return True, usage
+    return True, row, usage
 
 
 # =============================================================================
@@ -461,12 +501,13 @@ def main() -> None:
 
         print(f"[{i}/{len(tickers)}] {ticker}", end="  ", flush=True)
 
-        success, usage = score_one_firm(
+        success, row, usage = score_one_firm(
             ticker=ticker,
             cik=cik,
             tier=tier,
             sector_code=sector_code,
             system_prompt=system_prompt,
+            output_path=output_path,
             verify_cache=verify_cache,
         )
 
@@ -477,17 +518,14 @@ def main() -> None:
 
         usage_records.append(usage)
 
-        # Read the score back from the row just appended to the CSV
-        df_so_far = pd.read_csv(output_path)
-        this_row = df_so_far[df_so_far["ticker"] == ticker].iloc[-1]
-        ns = this_row["normalized_score"]
-        cost = this_row["cost_usd"]
-        retries = this_row["retries_used"]
-        print(f"ρ={ns}  cost=${cost:.5f}  retries={retries}")
+        # Console line: read directly from the row dict (pure Python types,
+        # no CSV round-trip, no numpy.float64 contamination)
+        print(f"ρ={row['normalized_score']}  cost=${row['cost_usd']:.5f}  "
+              f"retries={row['retries_used']}")
 
-        # For anchor mode, collect rows for soft pattern check
+        # Anchor mode: collect rows for soft pattern check
         if mode == "test":
-            rows_for_anchor_check.append(this_row.to_dict())
+            rows_for_anchor_check.append(row)
 
     elapsed = time.time() - t0
 
