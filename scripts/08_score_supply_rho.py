@@ -5,14 +5,17 @@ For each firm:
   1. Load pre-shock 10-K Item 1 from text_data/10k_extracts/{TICKER}.txt
   2. Strip the frontmatter block written by 02_collect_10k_text.py
   3. Pass full Item 1 body to llm_client.score_firm() with SupplyScore schema
-  4. Append one row to data/processed/lit_scores.csv
+  4. Append one row to data/processed/supply_rho.csv (default output)
 
 Modes:
   --test           : score the 14-15 anchor firms from anchor_firms.yaml + PFE
+                     (defaults to --iterations 3 unless overridden)
   --tickers T1 T2  : score specific tickers
   --limit N        : score first N tickers from firm_universe (debug helper)
-  --skip-existing  : skip tickers already present in output CSV
+  --skip-existing  : skip tickers already present in output CSV (rho_mean non-null)
   --output PATH    : override default output path
+  --iterations N   : number of independent scoring iterations per firm (1-3,
+                     default 1 for non-test modes; 3 for --test mode)
   --no-verify-cache : disable cache assertions (use for runs spanning
                       >5 minutes where TTL expiry is expected; cache
                       verification is on by default)
@@ -29,7 +32,7 @@ yaml numeric anchors would re-introduce researcher discretion.
 
 Strict formula reconciliation lives in scripts/utils/schemas.py
 (SupplyScore.check_formula_reconciliation). If the model adjusts a score
-away from the (e1 + 0.5*e2)/n_tasks * 99 + 1 formula, the Pydantic
+away from the (R1 + 0.5*R2)/n_tasks * 99 + 1 formula, the Pydantic
 validator rejects and llm_client retries. By the time score_firm() returns
 here, the score is formula-consistent.
 """
@@ -39,6 +42,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import statistics
 import sys
 import time
 from datetime import datetime, timezone
@@ -63,20 +67,33 @@ logger = get_logger("supply_score", "08_score_supply_rho")
 PROMPT_PATH    = Path("prompts/supply_rho_system.txt")
 UNIVERSE_PATH  = Path("data/raw/firm_universe.csv")
 TEXT_DIR       = Path("text_data/10k_extracts")
-OUTPUT_PATH    = Path("data/processed/lit_scores.csv")
+OUTPUT_PATH    = Path("data/processed/supply_rho.csv")
 ANCHOR_PATH    = Path("config/anchor_firms.yaml")
-ERROR_LOG_PATH = Path("data/processed/lit_scores_errors.jsonl")
+ERROR_LOG_PATH = Path("data/processed/supply_rho_errors.jsonl")
 
 # =============================================================================
 # Output schema
 # =============================================================================
 CSV_FIELDS = [
+    # Identity
     "ticker", "cik", "tier", "sector_code",
-    "n_tasks", "e0_count", "e1_count", "e2_count",
-    "raw_exposure", "normalized_score",
-    "reasoning", "tasks_json",
+    # Iteration 1 (always present)
+    "n_tasks_iter1", "r0_count_iter1", "r1_count_iter1", "r2_count_iter1",
+    "raw_exposure_iter1", "rho_iter1",
+    "tasks_json_iter1", "overall_reasoning_iter1",
+    # Iteration 2 (null when --iterations < 2)
+    "n_tasks_iter2", "r0_count_iter2", "r1_count_iter2", "r2_count_iter2",
+    "raw_exposure_iter2", "rho_iter2",
+    "tasks_json_iter2", "overall_reasoning_iter2",
+    # Iteration 3 (null when --iterations < 3)
+    "n_tasks_iter3", "r0_count_iter3", "r1_count_iter3", "r2_count_iter3",
+    "raw_exposure_iter3", "rho_iter3",
+    "tasks_json_iter3", "overall_reasoning_iter3",
+    # Aggregates
+    "rho_mean", "rho_std", "n_iterations_completed",
+    # Cost (summed across iterations)
     "input_tokens", "cache_creation_tokens", "cache_read_tokens", "output_tokens",
-    "cost_usd", "retries_used",
+    "cost_usd", "retries_used_total",
     "scored_at",
 ]
 
@@ -86,10 +103,19 @@ CSV_FIELDS = [
 TOOL_NAME = "submit_supply_score"
 TOOL_DESCRIPTION = (
     "Submit the supply-side LLM replicability score for the firm based on "
-    "E0/E1/E2 task classification. The normalized_score must be computed "
-    "deterministically from the formula (e1 + 0.5*e2) / n_tasks * 99 + 1. "
-    "Do not adjust manually."
+    "R0/R1/R2 task classification per the v3.1 rubric. The normalized_score "
+    "must be computed deterministically from the formula "
+    "(R1_count + 0.5 * R2_count) / n_tasks * 99 + 1. Do not adjust manually. "
+    "Each task must include a reasoning field justifying the R-label."
 )
+
+
+# =============================================================================
+# Exceptions
+# =============================================================================
+class IncompatibleCSVError(RuntimeError):
+    """Raised when output CSV uses an incompatible (pre-Step-5) column schema."""
+    pass
 
 
 # =============================================================================
@@ -206,11 +232,41 @@ def load_anchor_tickers() -> list[str]:
 
 
 def load_existing_tickers(path: Path) -> set[str]:
-    """Return set of tickers already in output CSV (for --skip-existing)."""
-    if not path.exists():
+    """Return set of tickers already in output CSV with a non-null rho_mean.
+
+    A row is considered 'existing' only when rho_mean is non-null, meaning
+    all iterations completed successfully.
+    """
+    if not path.exists() or path.stat().st_size == 0:
         return set()
-    df = pd.read_csv(path, usecols=["ticker"])
-    return set(df["ticker"].astype(str).str.upper())
+    df = pd.read_csv(path, usecols=["ticker", "rho_mean"])
+    mask = df["rho_mean"].notna()
+    return set(df.loc[mask, "ticker"].astype(str).str.upper())
+
+
+def check_csv_compatibility(path: Path) -> None:
+    """Raise IncompatibleCSVError if the existing CSV uses the old column schema.
+
+    Old format (pre-Step-5) has column 'e0_count'.
+    New format (Step-5+) has column 'r0_count_iter1'.
+    """
+    if not path.exists() or path.stat().st_size == 0:
+        return  # no file or empty file — will write header fresh
+
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return  # empty file
+
+    if "e0_count" in header:
+        raise IncompatibleCSVError(
+            f"Output CSV at {path} uses the old E0/E1/E2 column schema "
+            f"('e0_count' detected in header). Cannot append Step-5 format rows. "
+            f"Options: (1) delete the old file and rerun, "
+            f"(2) specify a new output path with --output."
+        )
 
 
 def append_row(path: Path, row: dict) -> None:
@@ -241,9 +297,9 @@ def append_error(path: Path, ticker: str, error_type: str, message: str) -> None
 
 
 # =============================================================================
-# Per-firm scoring
+# Per-firm scoring (multi-iteration)
 # =============================================================================
-def score_one_firm(
+def score_one_firm_multi_iter(
     ticker: str,
     cik: str,
     tier: str,
@@ -251,15 +307,16 @@ def score_one_firm(
     system_prompt: str,
     output_path: Path,
     verify_cache: bool,
-) -> tuple[bool, dict | None, dict | None]:
-    """Score one firm. Returns (success, row, usage_record).
+    iterations: int,
+) -> tuple[bool, dict | None, list[dict] | None]:
+    """Score one firm across `iterations` independent runs.
 
-    On success: appends row to output_path, returns (True, row, usage_record).
-    On error: logs to ERROR_LOG_PATH, returns (False, None, None).
+    Returns:
+        (success: bool, csv_row: dict | None, per_iter_usage: list[dict] | None)
 
-    The row dict is the same dict written to CSV — caller can use it for
-    downstream summaries (anchor pattern checks, console printing) without
-    re-reading the CSV from disk.
+    On success: appends row to output_path, returns (True, csv_row, per_iter_usage).
+    On error (any iteration): logs to ERROR_LOG_PATH, returns (False, None, None).
+    No partial rows are written — all iterations must succeed.
     """
     try:
         firm_text = load_firm_text(ticker)
@@ -268,55 +325,112 @@ def score_one_firm(
         append_error(ERROR_LOG_PATH, ticker, "text_load_failed", str(exc))
         return False, None, None
 
-    try:
-        result, usage = score_firm(
-            system_prompt=system_prompt,
-            firm_text=firm_text,
-            ticker=ticker,
-            schema=SupplyScore,
-            tool_name=TOOL_NAME,
-            tool_description=TOOL_DESCRIPTION,
-            verify_cache=verify_cache,
-        )
-    except CacheVerificationError as exc:
-        # Cache failures are programmer errors, not data errors — surface them
-        logger.error(f"{ticker}: cache verification failed: {exc}")
-        append_error(ERROR_LOG_PATH, ticker, "cache_verification_failed", str(exc))
-        raise  # halt execution; user must investigate
-    except LLMScoringError as exc:
-        logger.warning(f"{ticker}: scoring failed after retries: {exc}")
-        append_error(ERROR_LOG_PATH, ticker, "scoring_failed", str(exc))
-        return False, None, None
-    except Exception as exc:
-        logger.error(f"{ticker}: unexpected error: {type(exc).__name__}: {exc}")
-        append_error(ERROR_LOG_PATH, ticker, type(exc).__name__, str(exc))
-        return False, None, None
+    iter_results: list[dict] = []   # parsed field dicts, one per iteration
+    per_iter_usage: list[dict] = [] # raw usage dicts from score_firm()
 
-    # Build CSV row from validated SupplyScore + usage_record
-    row = {
-        "ticker": result.ticker,
+    for i in range(1, iterations + 1):
+        try:
+            result, usage = score_firm(
+                system_prompt=system_prompt,
+                firm_text=firm_text,
+                ticker=ticker,
+                schema=SupplyScore,
+                tool_name=TOOL_NAME,
+                tool_description=TOOL_DESCRIPTION,
+                verify_cache=verify_cache,
+            )
+        except CacheVerificationError as exc:
+            logger.error(f"{ticker} iter{i}: cache verification failed: {exc}")
+            append_error(ERROR_LOG_PATH, ticker, "cache_verification_failed", str(exc))
+            raise  # halt execution; user must investigate
+        except LLMScoringError as exc:
+            logger.warning(f"{ticker} iter{i}: scoring failed after retries: {exc}")
+            append_error(ERROR_LOG_PATH, ticker, "scoring_failed", str(exc))
+            return False, None, None
+        except Exception as exc:
+            logger.error(f"{ticker} iter{i}: unexpected error: {type(exc).__name__}: {exc}")
+            append_error(ERROR_LOG_PATH, ticker, type(exc).__name__, str(exc))
+            return False, None, None
+
+        iter_results.append({
+            "n_tasks": result.n_tasks,
+            "r0_count": result.r0_count,
+            "r1_count": result.r1_count,
+            "r2_count": result.r2_count,
+            "raw_exposure": round(result.raw_exposure, 4),
+            "rho": round(result.normalized_score, 1),
+            "tasks_json": json.dumps([t.model_dump() for t in result.tasks]),
+            "overall_reasoning": result.overall_reasoning,
+        })
+        per_iter_usage.append(usage)
+
+    # Compute aggregates
+    rho_values = [d["rho"] for d in iter_results]
+    rho_mean = round(sum(rho_values) / len(rho_values), 2)
+    rho_std = round(statistics.stdev(rho_values), 2) if len(rho_values) >= 2 else None
+
+    # Aggregate cost / token totals across iterations
+    total_input = sum(u["input_tokens"] for u in per_iter_usage)
+    total_cache_creation = sum(u["cache_creation_input_tokens"] for u in per_iter_usage)
+    total_cache_read = sum(u["cache_read_input_tokens"] for u in per_iter_usage)
+    total_output = sum(u["output_tokens"] for u in per_iter_usage)
+    total_cost = sum(u["cost_usd"] for u in per_iter_usage)
+    total_retries = sum(u["retries_used"] for u in per_iter_usage)
+
+    # Build CSV row — slots beyond `iterations` get empty strings
+    row: dict = {
+        "ticker": ticker,
         "cik": cik,
         "tier": tier,
         "sector_code": sector_code,
-        "n_tasks": result.n_tasks,
-        "e0_count": result.e0_count,
-        "e1_count": result.e1_count,
-        "e2_count": result.e2_count,
-        "raw_exposure": round(result.raw_exposure, 4),
-        "normalized_score": round(result.normalized_score, 1),
-        "reasoning": result.reasoning,
-        "tasks_json": json.dumps([t.model_dump() for t in result.tasks]),
-        "input_tokens": usage["input_tokens"],
-        "cache_creation_tokens": usage["cache_creation_input_tokens"],
-        "cache_read_tokens": usage["cache_read_input_tokens"],
-        "output_tokens": usage["output_tokens"],
-        "cost_usd": usage["cost_usd"],
-        "retries_used": usage["retries_used"],
-        "scored_at": datetime.now(timezone.utc).isoformat(),
     }
-    append_row(output_path, row)
 
-    return True, row, usage
+    for i in range(1, 4):
+        if i <= iterations:
+            d = iter_results[i - 1]
+            row[f"n_tasks_iter{i}"] = d["n_tasks"]
+            row[f"r0_count_iter{i}"] = d["r0_count"]
+            row[f"r1_count_iter{i}"] = d["r1_count"]
+            row[f"r2_count_iter{i}"] = d["r2_count"]
+            row[f"raw_exposure_iter{i}"] = d["raw_exposure"]
+            row[f"rho_iter{i}"] = d["rho"]
+            row[f"tasks_json_iter{i}"] = d["tasks_json"]
+            row[f"overall_reasoning_iter{i}"] = d["overall_reasoning"]
+        else:
+            row[f"n_tasks_iter{i}"] = ""
+            row[f"r0_count_iter{i}"] = ""
+            row[f"r1_count_iter{i}"] = ""
+            row[f"r2_count_iter{i}"] = ""
+            row[f"raw_exposure_iter{i}"] = ""
+            row[f"rho_iter{i}"] = ""
+            row[f"tasks_json_iter{i}"] = ""
+            row[f"overall_reasoning_iter{i}"] = ""
+
+    row["rho_mean"] = rho_mean
+    row["rho_std"] = rho_std if rho_std is not None else ""
+    row["n_iterations_completed"] = len(rho_values)
+    row["input_tokens"] = total_input
+    row["cache_creation_tokens"] = total_cache_creation
+    row["cache_read_tokens"] = total_cache_read
+    row["output_tokens"] = total_output
+    row["cost_usd"] = round(total_cost, 6)
+    row["retries_used_total"] = total_retries
+    row["scored_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Inline sanity assertions
+    assert row["n_iterations_completed"] == iterations, (
+        f"{ticker}: completed {row['n_iterations_completed']} but {iterations} requested"
+    )
+    if iterations > 1:
+        assert rho_std is not None, f"{ticker}: rho_std missing despite multi-iter"
+        if rho_std > 25:
+            sys.stderr.write(
+                f"WARN {ticker}: rho_std={rho_std:.2f} > 25 — high cross-iteration variance. "
+                f"Iterations: {rho_values}\n"
+            )
+
+    append_row(output_path, row)
+    return True, row, per_iter_usage
 
 
 # =============================================================================
@@ -332,6 +446,8 @@ def print_anchor_pattern_checks(rows: list[dict]) -> None:
     Phase 3 design principle: scores emerge from rubric matching, not
     from numeric anchor matching. The yaml `rho` values are stale
     Phase 3 holdover and were deliberately removed from the prompt.
+
+    In multi-iter mode, checks run on rho_mean.
     """
     print()
     print("=" * 60)
@@ -340,25 +456,32 @@ def print_anchor_pattern_checks(rows: list[dict]) -> None:
 
     by_ticker = {r["ticker"]: r for r in rows}
 
-    # Pattern 1: real-time security infrastructure (low scores expected)
+    def get_score(tkr: str) -> float:
+        row = by_ticker[tkr]
+        val = row.get("rho_mean")
+        if val is not None and val != "":
+            return float(val)
+        return float(row.get("rho_iter1", 0))
+
+    # Pattern 1: real-time security infrastructure (R0-dominant, low scores)
     realtime_security = ["ZS", "DDOG", "CRWD"]
     for tkr in realtime_security:
         if tkr in by_ticker:
-            score = by_ticker[tkr]["normalized_score"]
+            score = get_score(tkr)
             verdict = "OK" if score <= 30 else "WARN"
-            print(f"  [{verdict}] {tkr}: {score} (real-time security; expected ≤ 30)")
+            print(f"  [{verdict}] {tkr}: {score} (R0-dominant real-time; expected ≤ 30)")
 
-    # Pattern 2: text-heavy products (high scores expected)
+    # Pattern 2: text-heavy products (R1-dominant, high scores)
     text_heavy = ["HUBS", "LPSN", "EGAN", "ZIP"]
     for tkr in text_heavy:
         if tkr in by_ticker:
-            score = by_ticker[tkr]["normalized_score"]
+            score = get_score(tkr)
             verdict = "OK" if score >= 60 else "WARN"
-            print(f"  [{verdict}] {tkr}: {score} (text-heavy E1; expected ≥ 60)")
+            print(f"  [{verdict}] {tkr}: {score} (R1-dominant text-heavy; expected ≥ 60)")
 
     # Pattern 3: placebo (physical product, near floor)
     if "PFE" in by_ticker:
-        score = by_ticker["PFE"]["normalized_score"]
+        score = get_score("PFE")
         verdict = "OK" if score <= 15 else "WARN"
         print(f"  [{verdict}] PFE: {score} (placebo physical product; expected ≤ 15)")
 
@@ -366,26 +489,25 @@ def print_anchor_pattern_checks(rows: list[dict]) -> None:
     knowledge = ["MCO", "SPGI", "MSCI", "COUR", "CHGG"]
     for tkr in knowledge:
         if tkr in by_ticker:
-            score = by_ticker[tkr]["normalized_score"]
+            score = get_score(tkr)
             print(f"  [INFO] {tkr}: {score} (knowledge-intensive; sectoral variation expected)")
 
     # Pattern 5: VEEV (regulated software, mid-range)
     if "VEEV" in by_ticker:
-        score = by_ticker["VEEV"]["normalized_score"]
+        score = get_score("VEEV")
         verdict = "OK" if 25 <= score <= 55 else "WARN"
-        print(f"  [{verdict}] VEEV: {score} (regulated mixed E1/E2; expected 25–55)")
+        print(f"  [{verdict}] VEEV: {score} (regulated R0/R1/R2 mix; expected 25–55)")
 
     # Pattern 6: PAYC (text + compliance)
     if "PAYC" in by_ticker:
-        score = by_ticker["PAYC"]["normalized_score"]
+        score = get_score("PAYC")
         verdict = "OK" if 35 <= score <= 75 else "WARN"
-        print(f"  [{verdict}] PAYC: {score} (HCM/payroll text-heavy; expected 35–75)")
+        print(f"  [{verdict}] PAYC: {score} (HCM/payroll R1-heavy; expected 35–75)")
 
     print()
     print("These are heuristic pattern checks for human review.")
     print("WARNs are flags for sanity inspection, not failures.")
-    print("Phase 4 Day 3 will add Eloundou aggregate cross-validation as the")
-    print("literature-grounded informational benchmark (see phase6_notes.md).")
+    print("Step 6 will compute ICC(3,1) on rho_iter1/2/3 as the reliability gate.")
 
 
 # =============================================================================
@@ -423,9 +545,9 @@ def main() -> None:
         description="Phase 4: score supply-side LLM replicability (ρ_i)"
     )
     parser.add_argument("--test", action="store_true",
-                        help="Score anchor firms only (~$0.50, soft pattern checks)")
+                        help="Score anchor firms only (soft pattern checks; default --iterations 3)")
     parser.add_argument("--skip-existing", action="store_true",
-                        help="Skip tickers already in output CSV")
+                        help="Skip tickers already in output CSV (rho_mean non-null)")
     parser.add_argument("--tickers", nargs="+", metavar="TICKER",
                         help="Score specific tickers (overrides --test)")
     parser.add_argument("--limit", type=int, default=None,
@@ -434,10 +556,32 @@ def main() -> None:
                         help=f"Output CSV path (default: {OUTPUT_PATH})")
     parser.add_argument("--no-verify-cache", action="store_true",
                         help="Disable cache assertions (use for >5min runs)")
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=None,
+        choices=[1, 2, 3],
+        help=(
+            "Number of independent scoring iterations per firm. "
+            "Use 1 for full sample scoring (default for non-test modes). "
+            "Use 3 for anchor reliability validation (Step 6). "
+            "Each iteration is a separate API call with the same prompt and "
+            "firm text but a fresh model invocation; iteration variance is "
+            "the noise we are measuring. Defaults to 3 in --test mode."
+        ),
+    )
     args = parser.parse_args()
 
     output_path = args.output
     verify_cache = not args.no_verify_cache
+
+    # Resolve iterations: test mode defaults to 3 unless explicitly set
+    if args.iterations is not None:
+        iterations = args.iterations
+    elif args.test:
+        iterations = 3
+    else:
+        iterations = 1
 
     # Determine ticker list
     if args.tickers:
@@ -452,6 +596,9 @@ def main() -> None:
         if args.limit is not None:
             tickers = tickers[:args.limit]
         mode = "full" if args.limit is None else f"limited({args.limit})"
+
+    # Check CSV compatibility before any file I/O
+    check_csv_compatibility(output_path)
 
     # Skip existing if requested
     if args.skip_existing:
@@ -476,6 +623,7 @@ def main() -> None:
     # Print run banner
     print(f"Mode:        {mode}")
     print(f"Tickers:     {len(tickers)}")
+    print(f"Iterations:  {iterations}")
     print(f"Output:      {output_path}")
     print(f"Cache check: {'enabled' if verify_cache else 'DISABLED'}")
     if mode == "test":
@@ -484,7 +632,7 @@ def main() -> None:
 
     reset_cumulative_state()
     rows_for_anchor_check: list[dict] = []
-    usage_records: list[dict] = []
+    all_iter_usage: list[dict] = []  # flattened per-API-call usage records
     n_failed = 0
 
     t0 = time.time()
@@ -501,7 +649,7 @@ def main() -> None:
 
         print(f"[{i}/{len(tickers)}] {ticker}", end="  ", flush=True)
 
-        success, row, usage = score_one_firm(
+        success, row, per_iter_usage = score_one_firm_multi_iter(
             ticker=ticker,
             cik=cik,
             tier=tier,
@@ -509,6 +657,7 @@ def main() -> None:
             system_prompt=system_prompt,
             output_path=output_path,
             verify_cache=verify_cache,
+            iterations=iterations,
         )
 
         if not success:
@@ -516,14 +665,16 @@ def main() -> None:
             print("FAILED (see error log)")
             continue
 
-        usage_records.append(usage)
+        all_iter_usage.extend(per_iter_usage)
 
-        # Console line: read directly from the row dict (pure Python types,
-        # no CSV round-trip, no numpy.float64 contamination)
-        print(f"ρ={row['normalized_score']}  cost=${row['cost_usd']:.5f}  "
-              f"retries={row['retries_used']}")
+        # Console line: show rho_mean in multi-iter mode, rho_iter1 in single-iter
+        if iterations > 1:
+            rho_display = f"ρ_mean={row['rho_mean']}  std={row['rho_std']}"
+        else:
+            rho_display = f"ρ={row['rho_iter1']}"
+        print(f"{rho_display}  cost=${row['cost_usd']:.5f}  "
+              f"retries={row['retries_used_total']}")
 
-        # Anchor mode: collect rows for soft pattern check
         if mode == "test":
             rows_for_anchor_check.append(row)
 
@@ -534,10 +685,11 @@ def main() -> None:
         print_anchor_pattern_checks(rows_for_anchor_check)
 
     # Cost summary
-    print_cost_summary(usage_records, elapsed)
+    print_cost_summary(all_iter_usage, elapsed)
 
     # Final tallies
-    print(f"  Successful:              {len(usage_records)}")
+    n_successful = len(tickers) - n_failed
+    print(f"  Successful:              {n_successful}")
     print(f"  Failed:                  {n_failed}")
     print()
     print(f"Output written to: {output_path}")
