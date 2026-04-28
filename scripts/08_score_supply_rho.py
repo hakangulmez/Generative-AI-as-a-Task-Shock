@@ -30,11 +30,11 @@ or trigger prompt iteration on their own. The Phase 3 design principle is
 that scores emerge deterministically from rubric matching; pulling toward
 yaml numeric anchors would re-introduce researcher discretion.
 
-Strict formula reconciliation lives in scripts/utils/schemas.py
-(SupplyScore.check_formula_reconciliation). If the model adjusts a score
-away from the (R1 + 0.5*R2)/n_tasks * 99 + 1 formula, the Pydantic
-validator rejects and llm_client retries. By the time score_firm() returns
-here, the score is formula-consistent.
+The model returns only ticker, tasks, and overall_reasoning. Counts and
+rho score are computed deterministically by compute_aggregates() from
+the validated task labels — the model is never asked to self-report
+summary counts, which eliminated a self-consistency failure mode
+observed in Step 6a smoke (ZS: count mismatches across all 3 retries).
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ from utils.llm_client import (
     score_firm, aggregate_costs, reset_cumulative_state,
     LLMScoringError, CacheVerificationError,
 )
-from utils.schemas import SupplyScore
+from utils.schemas import SupplyScore, compute_aggregates
 from utils.logging_setup import get_logger
 
 logger = get_logger("supply_score", "08_score_supply_rho")
@@ -102,11 +102,11 @@ CSV_FIELDS = [
 # =============================================================================
 TOOL_NAME = "submit_supply_score"
 TOOL_DESCRIPTION = (
-    "Submit the supply-side LLM replicability score for the firm based on "
-    "R0/R1/R2 task classification per the v3.1 rubric. The normalized_score "
-    "must be computed deterministically from the formula "
-    "(R1_count + 0.5 * R2_count) / n_tasks * 99 + 1. Do not adjust manually. "
-    "Each task must include a reasoning field justifying the R-label."
+    "Submit a list of 6-12 software product tasks for the firm, each "
+    "classified per the R-rubric (R0 / R1 / R2) with a brief reasoning "
+    "field. Also submit a 2-3 sentence overall_reasoning describing the "
+    "product. Do NOT include count summaries or scores — those are "
+    "computed deterministically from your task labels."
 )
 
 
@@ -352,13 +352,14 @@ def score_one_firm_multi_iter(
             append_error(ERROR_LOG_PATH, ticker, type(exc).__name__, str(exc))
             return False, None, None
 
+        aggregates = compute_aggregates(result)
         iter_results.append({
-            "n_tasks": result.n_tasks,
-            "r0_count": result.r0_count,
-            "r1_count": result.r1_count,
-            "r2_count": result.r2_count,
-            "raw_exposure": round(result.raw_exposure, 4),
-            "rho": round(result.normalized_score, 1),
+            "n_tasks": aggregates["n_tasks"],
+            "r0_count": aggregates["r0_count"],
+            "r1_count": aggregates["r1_count"],
+            "r2_count": aggregates["r2_count"],
+            "raw_exposure": aggregates["raw_exposure"],
+            "rho": aggregates["normalized_score"],
             "tasks_json": json.dumps([t.model_dump() for t in result.tasks]),
             "overall_reasoning": result.overall_reasoning,
         })

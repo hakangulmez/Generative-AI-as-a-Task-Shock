@@ -6,17 +6,18 @@ These schemas serve two purposes:
      tool_use API as the input_schema for forced structured output.
   2. Response validation in llm_client.py — invalid responses trigger retry.
 
-The validators enforce the methodology decisions made in Phase 3 (demand)
-and Phase 4 v3.1 (supply, R-rubric):
-  - Supply: normalized_score must equal (R1 + 0.5*R2)/n_tasks * 99 + 1
-  - Demand: each sub-score must be on the 0.0, 0.1, 0.2, ..., 1.0 grid
-  - Demand: composite must equal (delta_switch + delta_error + delta_data) / 3
+Supply (SupplyScore): the model returns only ticker, tasks, and
+overall_reasoning. Aggregate counts and rho score are computed
+post-hoc by compute_aggregates(), which is the single source of truth
+for the formula: ρ = (R1 + 0.5×R2) / n_tasks × 99 + 1.
 
-Mismatches raise pydantic.ValidationError. The client treats this as a
-retryable failure (the model gets a second chance to recompute), and on
-final failure raises LLMScoringError. This is the strict formula
-reconciliation policy: the model is not permitted to manually adjust
-scores away from the formula.
+Demand (DemandScore): the model returns sub-scores and composite. The
+validators enforce the 0.1-grid and composite formula:
+  - Each sub-score must be on the 0.0, 0.1, 0.2, ..., 1.0 grid
+  - Composite must equal (delta_switch + delta_error + delta_data) / 3
+
+Mismatches raise pydantic.ValidationError → retryable failure in
+llm_client.py. Final failure raises LLMScoringError.
 """
 
 from __future__ import annotations
@@ -50,15 +51,19 @@ class SupplyScore(BaseModel):
 
     Methodology: PHASE4_METHODOLOGY_v3.md Section 5.
     Aggregation: ρ_i = (R1_count + 0.5 × R2_count) / n_tasks × 99 + 1
+
+    Only `ticker`, `tasks`, and `overall_reasoning` are model-reported.
+    All numeric aggregates (r0_count, r1_count, r2_count, n_tasks,
+    raw_exposure, normalized_score) are computed by the
+    `compute_aggregates()` helper from `tasks` after validation.
+
+    This separation prevents the model from reporting counts that
+    disagree with its own task labels — a self-consistency failure
+    observed in Step 6a smoke v2 with ZS (10 tasks, R0/R2
+    ambiguous boundary cases).
     """
     ticker: str = Field(..., min_length=1, max_length=10)
     tasks: list[ProductTaskWithRubric] = Field(..., min_length=6, max_length=12)
-    r0_count: int = Field(..., ge=0, le=12)
-    r1_count: int = Field(..., ge=0, le=12)
-    r2_count: int = Field(..., ge=0, le=12)
-    n_tasks: int = Field(..., ge=6, le=12)
-    raw_exposure: float = Field(..., ge=0.0, le=1.0)
-    normalized_score: float = Field(..., ge=1.0, le=100.0)
     overall_reasoning: str = Field(
         ...,
         min_length=150,
@@ -66,60 +71,46 @@ class SupplyScore(BaseModel):
         description="2-3 sentences describing what the product does and what determines its R-distribution",
     )
 
-    @model_validator(mode="after")
-    def check_task_counts(self):
-        """n_tasks must equal len(tasks) and equal r0_count + r1_count + r2_count.
-        Per-rubric counts must match the actual classifications in `tasks`."""
-        actual_r0 = sum(1 for t in self.tasks if t.r_label == "R0")
-        actual_r1 = sum(1 for t in self.tasks if t.r_label == "R1")
-        actual_r2 = sum(1 for t in self.tasks if t.r_label == "R2")
+    # No model_validator — there is nothing to reconcile.
+    # Counts and rho are computed by compute_aggregates() below.
 
-        if self.n_tasks != len(self.tasks):
-            raise ValueError(f"n_tasks={self.n_tasks} but len(tasks)={len(self.tasks)}")
-        if self.r0_count != actual_r0:
-            raise ValueError(f"r0_count={self.r0_count} but tasks contain {actual_r0} R0 entries")
-        if self.r1_count != actual_r1:
-            raise ValueError(f"r1_count={self.r1_count} but tasks contain {actual_r1} R1 entries")
-        if self.r2_count != actual_r2:
-            raise ValueError(f"r2_count={self.r2_count} but tasks contain {actual_r2} R2 entries")
-        if self.n_tasks != self.r0_count + self.r1_count + self.r2_count:
-            raise ValueError(
-                f"n_tasks={self.n_tasks} but r0+r1+r2={self.r0_count + self.r1_count + self.r2_count}"
-            )
-        return self
 
-    @model_validator(mode="after")
-    def check_formula_reconciliation(self):
-        """STRICT MODE: model-reported normalized_score must match the formula.
+def compute_aggregates(score: SupplyScore) -> dict:
+    """Compute aggregate counts and rho score from a validated SupplyScore.
 
-        formula:    raw_exposure     = (r1 + 0.5 * r2) / n_tasks
-                    normalized_score = round(raw_exposure * 99 + 1, 1)
+    Returns a dict with the same keys downstream code expects:
+        r0_count, r1_count, r2_count, n_tasks,
+        raw_exposure, normalized_score
 
-        Tolerances:
-          raw_exposure:     0.02  (covers rounding to 3-4 decimals in JSON)
-          normalized_score: 1.0   (covers compounding rounding in the final formula)
+    Formula (Eloundou 2024 β, methodology v3 Section 5):
+        raw_exposure     = (r1_count + 0.5 * r2_count) / n_tasks
+        normalized_score = round(raw_exposure * 99 + 1, 1)
 
-        Violation indicates the model manually adjusted the score, which is
-        explicitly forbidden by the prompt and by Phase 4 v3.1 design intent.
-        """
-        formula_raw = (self.r1_count + 0.5 * self.r2_count) / self.n_tasks
-        formula_normalized = round(formula_raw * 99 + 1, 1)
+    This is the single source of truth for rho computation. Any caller
+    that needs aggregates must use this function — do NOT hand-compute
+    them elsewhere.
+    """
+    r0_count = sum(1 for t in score.tasks if t.r_label == "R0")
+    r1_count = sum(1 for t in score.tasks if t.r_label == "R1")
+    r2_count = sum(1 for t in score.tasks if t.r_label == "R2")
+    n_tasks = len(score.tasks)
 
-        if abs(self.raw_exposure - formula_raw) > 0.02:
-            raise ValueError(
-                f"raw_exposure reconciliation failed for {self.ticker}: "
-                f"reported={self.raw_exposure} but "
-                f"(r1={self.r1_count} + 0.5*r2={self.r2_count}) / n={self.n_tasks} "
-                f"= {formula_raw:.4f}"
-            )
+    assert r0_count + r1_count + r2_count == n_tasks, (
+        f"task labels malformed for {score.ticker}: "
+        f"{r0_count}+{r1_count}+{r2_count} != {n_tasks}"
+    )
 
-        if abs(self.normalized_score - formula_normalized) > 1.0:
-            raise ValueError(
-                f"normalized_score reconciliation failed for {self.ticker}: "
-                f"reported={self.normalized_score} but formula gives {formula_normalized}. "
-                f"The model may have manually adjusted the score — re-score required."
-            )
-        return self
+    raw_exposure = (r1_count + 0.5 * r2_count) / n_tasks
+    normalized_score = round(raw_exposure * 99 + 1, 1)
+
+    return {
+        "r0_count": r0_count,
+        "r1_count": r1_count,
+        "r2_count": r2_count,
+        "n_tasks": n_tasks,
+        "raw_exposure": round(raw_exposure, 4),
+        "normalized_score": normalized_score,
+    }
 
 
 class DemandScore(BaseModel):
@@ -195,8 +186,7 @@ class DemandScore(BaseModel):
 
 if __name__ == "__main__":
     # ============================================================
-    # Supply: valid input (ZS-like, R0-dominant: 5 R0 + 1 R2)
-    # raw_exposure = 0.5/6 = 0.0833; normalized = round(0.0833*99+1, 1) = 9.2
+    # Supply: valid input — model returns only ticker/tasks/overall_reasoning
     # ============================================================
     valid_supply = {
         "ticker": "ZS",
@@ -232,63 +222,21 @@ if __name__ == "__main__":
                 "reasoning": "SQL queries plus LLM synthesis can generate compliance reports from structured admin data.",
             },
         ],
-        "r0_count": 5, "r1_count": 0, "r2_count": 1, "n_tasks": 6,
-        "raw_exposure": 0.0833,
-        "normalized_score": 9.2,
         "overall_reasoning": (
-            "Zscaler's product is a real-time security infrastructure where "
-            "the core tasks operate on live network traffic streams and "
-            "policy enforcement happens at the packet level with sub-millisecond "
-            "latency requirements. Most tasks are R0 due to streaming-data "
-            "and latency dependencies that LLMs cannot replicate at operational scale."
+            "Zscaler's product is a real-time security infrastructure where the core "
+            "tasks operate on live network traffic streams and policy enforcement "
+            "happens at the packet level with sub-millisecond latency requirements. "
+            "Most tasks are R0 due to streaming-data and latency dependencies that "
+            "LLMs cannot replicate at operational scale."
         ),
     }
     s = SupplyScore.model_validate(valid_supply)
-    print(f"OK supply valid: {s.ticker} score={s.normalized_score} n={s.n_tasks}")
-
-    # ============================================================
-    # Supply: formula mismatch should fail (model "adjusted" score)
-    # ============================================================
-    bad_supply_score = dict(valid_supply)
-    bad_supply_score["normalized_score"] = 50.0  # way off from 9.2
-    try:
-        SupplyScore.model_validate(bad_supply_score)
-        print("FAIL: should have rejected formula mismatch")
-        raise SystemExit(1)
-    except Exception as e:
-        msg = str(e)
-        assert "reconciliation failed" in msg, f"unexpected error: {msg[:200]}"
-        print("OK supply rejects formula mismatch")
-
-    # ============================================================
-    # Supply: count mismatch should fail
-    # r0_count=4 but tasks contain 5 R0 entries
-    # ============================================================
-    bad_supply_count = dict(valid_supply)
-    bad_supply_count["r0_count"] = 4  # but tasks contain 5 R0 entries
-    bad_supply_count["r1_count"] = 1  # adjust to keep n_tasks=6 sum consistent
-    try:
-        SupplyScore.model_validate(bad_supply_count)
-        print("FAIL: should have rejected count mismatch")
-        raise SystemExit(1)
-    except Exception as e:
-        msg = str(e)
-        assert "tasks contain" in msg, f"unexpected error: {msg[:200]}"
-        print("OK supply rejects count mismatch")
-
-    # ============================================================
-    # Supply: short overall_reasoning should fail (min_length 150)
-    # ============================================================
-    bad_supply_reasoning = dict(valid_supply)
-    bad_supply_reasoning["overall_reasoning"] = "Real-time security. Mostly R0."
-    try:
-        SupplyScore.model_validate(bad_supply_reasoning)
-        print("FAIL: should have rejected short reasoning")
-        raise SystemExit(1)
-    except Exception as e:
-        msg = str(e)
-        assert "at least 150" in msg or "string_too_short" in msg, f"unexpected error: {msg[:200]}"
-        print("OK supply rejects short reasoning")
+    aggregates = compute_aggregates(s)
+    assert aggregates["r0_count"] == 5
+    assert aggregates["r2_count"] == 1
+    assert aggregates["n_tasks"] == 6
+    assert aggregates["normalized_score"] == 9.2  # (0 + 0.5)/6 * 99 + 1
+    print(f"OK supply valid: {s.ticker} score={aggregates['normalized_score']} n={aggregates['n_tasks']}")
 
     # ============================================================
     # Supply: short per-task reasoning should fail (min_length 30)
@@ -306,6 +254,34 @@ if __name__ == "__main__":
         msg = str(e)
         assert "at least 30" in msg or "string_too_short" in msg, f"unexpected error: {msg[:200]}"
         print("OK supply rejects short per-task reasoning")
+
+    # ============================================================
+    # Supply: short overall_reasoning should fail (min_length 150)
+    # ============================================================
+    bad_supply_reasoning = dict(valid_supply)
+    bad_supply_reasoning["overall_reasoning"] = "Real-time security. Mostly R0."
+    try:
+        SupplyScore.model_validate(bad_supply_reasoning)
+        print("FAIL: should have rejected short overall_reasoning")
+        raise SystemExit(1)
+    except Exception as e:
+        msg = str(e)
+        assert "at least 150" in msg or "string_too_short" in msg, f"unexpected error: {msg[:200]}"
+        print("OK supply rejects short overall_reasoning")
+
+    # ============================================================
+    # Supply: too few tasks (5) should fail (min_length 6)
+    # ============================================================
+    bad_supply_few = dict(valid_supply)
+    bad_supply_few["tasks"] = valid_supply["tasks"][:5]
+    try:
+        SupplyScore.model_validate(bad_supply_few)
+        print("FAIL: should have rejected 5 tasks")
+        raise SystemExit(1)
+    except Exception as e:
+        msg = str(e)
+        assert "at least 6" in msg or "too_short" in msg, f"unexpected error: {msg[:200]}"
+        print("OK supply rejects too few tasks")
 
     # ============================================================
     # Demand: valid input (VEEV-like, FDA regulated)
