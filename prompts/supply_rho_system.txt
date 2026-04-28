@@ -222,6 +222,86 @@ DO NOT label tasks R0 because of customer adoption barriers. Use R0 only for
 fundamental functional limits.
 
 ═══════════════════════════════════════════════════════════════
+SECTION 5b — BOUNDARY HEURISTICS FOR GRAY-ZONE TASKS
+═══════════════════════════════════════════════════════════════
+
+The R0/R1/R2 classification will produce a clear answer for ~70-80% of
+software product tasks. The remaining ~20-30% sit on boundaries — and
+how those are resolved drives most of the inter-iteration variance in
+the score. Apply the following heuristics to gray-zone cases.
+
+─── R1 vs R2 — when does "tools" really matter? ───
+
+Default to R1 if:
+  • The task can be performed by pasting representative content into
+    a chat window and getting a useful response in one turn
+  • The required context fits in a single LLM context window (~100K
+    tokens for vanilla 2022 frontier; ~10-50K for cheaper variants)
+  • No external system access is needed (no SQL queries, no API calls,
+    no document corpus lookup beyond what the user pastes)
+
+Push to R2 if:
+  • The task requires looking up information across multiple documents,
+    records, or database rows BEFORE generating output
+  • The task requires writing to or modifying external state (creating
+    a record, sending an email, updating a CRM field)
+  • The task requires multi-step orchestration (read → lookup → decide
+    → act → report) where each step depends on prior step's output
+  • The corpus is too large to inline (entire knowledge bases,
+    multi-thousand-page document sets, full transaction histories)
+
+When ambiguous, ask: "If I gave a smart non-engineer access to ChatGPT
+in November 2022 plus the document, could they do this task?" If yes,
+R1. If they would need a developer to build the integration, R2.
+
+─── R0 vs R2 — when does "tools" hit a fundamental wall? ───
+
+Push to R0 if ANY of:
+  • Sub-second latency is part of the product SLA (real-time alerting,
+    line-rate inspection, sub-100ms API response)
+  • Throughput requirement exceeds what LLM inference can sustain
+    (millions of events per second, thousands of concurrent streams)
+  • The task is deterministic by regulatory or contractual requirement
+    (rating agency final attestation, FDA-validated computation,
+    cryptographic signature)
+  • The task requires hardware integration (sensor fusion, device
+    control, network packet manipulation, embedded systems)
+  • The proprietary data accumulation IS the moat — the task cannot
+    be performed at all without years of internal data that competitors
+    cannot acquire from public sources
+
+R2 (not R0) if:
+  • The task is computationally expensive but bounded (one analysis run
+    per user request rather than continuous streaming)
+  • The proprietary data is licensable or replicable from public sources
+  • Real-time is a "nice to have" rather than the product itself
+  • Custom integration exists but is not the core competitive moat
+
+─── Edge cases that recur across firms ───
+
+Anomaly detection: R0 if streaming/real-time at scale; R2 if batch
+analysis on hourly or daily aggregates; R1 if the "anomaly detection"
+is really pattern-matching on text descriptions.
+
+Search/retrieval: R1 if the user pastes content; R2 if the system
+indexes a corpus; R0 if the corpus is proprietary at scale (e.g.,
+a search engine's web index).
+
+Workflow automation: R2 by default (LLM + API calls); R0 only if the
+workflow has hard real-time constraints or regulatory determinism
+requirements (e.g., automated trade execution, automated drug dosing).
+
+Reporting/dashboards: R1 if the report is text generation from inline
+data; R2 if the system queries a database first; R0 only if the
+underlying computation is itself the product (e.g., index calculation
+for a market index provider).
+
+When in doubt between R1 and R2, R2 is the more conservative choice
+(receives weight 0.5 rather than 1.0). When in doubt between R2 and
+R0, choose based on whether the constraint is "hard" (latency,
+regulatory, scale) — hard → R0, soft → R2.
+
+═══════════════════════════════════════════════════════════════
 SECTION 6 — STEP 4: COMPUTE SCORES
 ═══════════════════════════════════════════════════════════════
 
