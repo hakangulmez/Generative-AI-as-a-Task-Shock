@@ -43,8 +43,8 @@ All data panels are built. Phase 3 prompt engineering is complete. Phase 4 (API 
 | 6. Margin panel | `06_build_margin_panel.py` | `data/processed/margin_panel.csv` | Done — 321 firms, 41,960 rows |
 | 7. AI mention panel | `07_build_ai_mention_panel.py` | `data/processed/ai_mention_panel.csv` | Done — 321 firms, 8,437 filings |
 | Phase 3: prompt engineering | `prompts/*.txt` | — | Done — Apr 2026 |
-| 8. Supply scoring (ρ_i) | `08_score_supply_rho.py` | `data/processed/lit_scores.csv` | Pending — Phase 4 |
-| 9. Demand scoring (δ_i) | `09_score_demand_delta.py` | `data/processed/demand_friction.csv` | Pending — after step 8 |
+| 8. Supply scoring (ρ_i) | `08_score_supply_rho.py` | `data/processed/supply_rho.csv` | In progress — smoke validated, anchor reliability pending |
+| 9. Demand scoring (δ_i) | `09_score_demand_delta.py` | `data/processed/demand_delta.csv` | Pending — Phase 4 Step 8, after supply complete |
 | 10. DiD regressions | `analysis/did_v3.R` | — | Pending — after steps 8–9 |
 
 ---
@@ -60,24 +60,29 @@ scripts/
   05_build_billings_panel.py    # Billings = revenue + gap-aware rpo_delta
   06_build_margin_panel.py      # 5 margin/intensity ratios from financial_panel, P1/P99 winsorized
   07_build_ai_mention_panel.py  # AI mention counts from 10-K/10-Q full filing text
-  08_score_supply_rho.py        # Supply-side LLM replicability scoring via Claude API (Phase 4)
-  09_score_demand_delta.py      # Demand-side friction scoring via Claude API (Phase 4)
+  08_score_supply_rho.py        # Supply-side ρ scoring via Claude Haiku 4.5 — multi-iter, R-rubric, in progress
+  09_score_demand_delta.py      # Demand-side δ scoring — Phase 4 Step 8, not yet created
+  build_eloundou_corpus.py      # Phase 6 robustness alternative — Eloundou ONET corpus build, not in primary pipeline
 
   utils/
     edgar.py                    # EDGAR client: submissions, companyfacts, filing text
     xbrl.py                     # XBRL extraction, Q4 formula, RPO fallback chain
     text_sections.py            # 10-K section parser (Item 1 extraction + iXBRL)
-    llm_client.py               # LLM client with prompt caching (Phase 4 first deliverable)
+    llm_client.py               # Anthropic API client with cache verification + retry logic
+    schemas.py                  # Pydantic schemas: SupplyScore, DemandScore, ProductTaskWithRubric
+    icc.py                      # ICC(3,1) computation (Koo & Li 2016)
+    task_matching.py            # Phase 6 robustness alternative — embedding match, not in primary pipeline
     logging_setup.py            # Structured logging
 
 analysis/
   did_v3.R                      # Two-way FE DiD + WCB inference (fixest + fwildclusterboot)
 
 prompts/
-  supply_rho_system.txt         # Supply-side scoring prompt (E0/E1/E2 framework, pure Eloundou β)
-  demand_delta_system.txt       # Demand-side scoring prompt (δ_switch/δ_error/δ_data, 6-level rubric)
+  supply_rho_system.txt         # Supply-side ρ scoring prompt — R-rubric (R0/R1/R2), de-anchored archetypes, ~20.3KB
+  demand_delta_system.txt       # Demand-side δ scoring prompt — δ_switch/δ_error/δ_data, 6-level rubric, ~23.1KB
 
 docs/
+  PHASE4_METHODOLOGY_v3.md      # Phase 4 methodology v3.3 — R-rubric, ICC thresholds, capability dynamics defense
   phase6_notes.md               # Thesis writing phase notes — robustness + methodology defense
 
 config/
@@ -88,16 +93,20 @@ config/
   universe_tickers.yaml         # Explicit ticker lists per tier
 
 data/
+  external/
+    eloundou_full_labelset.tsv         # Eloundou et al. (2024) ONET task corpus — Phase 6 robustness only
+    eloundou_task_embeddings.parquet   # Pre-computed task embeddings — Phase 6 alternative spec
   raw/
-    firm_universe.csv           # 321 firms: ticker, CIK, SIC, exchange, tier, sector_code
+    firm_universe.csv                  # 321 firms: ticker, CIK, SIC, exchange, tier, sector_code
   processed/
-    financial_panel.csv         # 321 firms, 61,857 obs (10 metrics, 2019Q1–2025Q4)
-    rpo_quarterly.csv           # 279 firms, 5,293 rows (quarterly RPO snapshots)
-    billings_panel.csv          # 321 firms, 8,207 rows (revenue + gap-aware rpo_delta)
-    margin_panel.csv            # 321 firms, 41,960 rows (5 ratios, P1/P99 winsorized)
-    ai_mention_panel.csv        # 321 firms, 8,437 filings (AI mentions by category)
-    lit_scores.csv              # Supply scores (ρ_i) — produced by 08_score_supply_rho.py in Phase 4
-    demand_friction.csv         # Demand scores (δ_i) — produced by 09_score_demand_delta.py in Phase 4
+    financial_panel.csv                # 321 firms, 61,857 obs (10 metrics, 2019Q1–2025Q4)
+    rpo_quarterly.csv                  # 279 firms, 5,293 rows (quarterly RPO snapshots)
+    billings_panel.csv                 # 321 firms, 8,207 rows (revenue + gap-aware rpo_delta)
+    margin_panel.csv                   # 321 firms, 41,960 rows (5 ratios, P1/P99 winsorized)
+    ai_mention_panel.csv               # 321 firms, 8,437 filings (AI mentions by category)
+    supply_rho.csv                     # Supply scores (ρ_i) — produced by Step 7 full run, not yet generated
+    supply_rho_smoke_v*.csv            # Phase 4 smoke test diagnostic records (kept for reproducibility)
+    demand_delta.csv                   # Demand scores (δ_i) — produced by Step 8, not yet generated
 
 notebooks/
   thesis_notebook.ipynb         # All figures (the only place for figure code)
@@ -124,21 +133,13 @@ All data sourced exclusively from public SEC EDGAR APIs — no external data pro
 
 ### Supply Side: ρ_i — LLM Replicability Score ∈ [1, 100]
 
-Each firm's pre-shock 10-K Item 1 Business Description is scored using an adaptation of the Eloundou et al. (2024) "GPTs are GPTs" task-exposure framework, applied one level up the value chain at the product level rather than the worker level.
-
-The firm's product is decomposed into 6–10 customer-facing tasks, each classified as:
-- **E1** — direct LLM exposure: tasks whose output is primarily text, documents, communication, or text-based matching/ranking
-- **E2** — LLM + standard tools: tasks requiring database or API access before generating language output
-- **E0** — no meaningful LLM exposure: real-time data streams, physical hardware, sub-second latency SLA, or deep proprietary system integration as the core moat
-
-The final score is the Eloundou β aggregation applied at the product level:
+Each firm's pre-shock 10-K Item 1 Business Description is classified by Claude Haiku 4.5 against the **R-rubric** (software-adapted from Eloundou et al. 2024 and Eisfeldt-Schubert-Zhang 2023): R0 (outside LLM scope — hard latency, hardware control, scale economics, deterministic compute), R1 (direct vanilla LLM substitute — text generation, classification, summarization), R2 (LLM + standard tools — RAG, SQL, code execution). The score is the Eloundou β aggregation:
 
 ```
-raw_exposure     = (E1_count + 0.5 × E2_count) / n_tasks
-normalized_score = round(raw_exposure × 99 + 1, 1)   ∈ [1, 100]
+ρ_i = ((R1_count + 0.5 × R2_count) / n_tasks) × 99 + 1   ∈ [1, 100]
 ```
 
-Scores emerge deterministically from task classification. The scoring prompt includes a panel of 15 firms covering software, knowledge-intensive services, and placebo sectors as **task decomposition examples** — these teach classification logic (which tasks belong to E0, E1, or E2 for a given product type) but are not numeric calibration targets. The prompt explicitly forbids the model from targeting any expected score.
+The aggregation is computed deterministically by `compute_aggregates()` from validated task labels — the model is never asked to self-report counts. The prompt forbids targeting expected scores; five anchor archetypes (EGAN, ZS, HUBS, SPGI, DDOG) illustrate task decomposition patterns without numeric calibration targets. Multi-iteration scoring (3 runs per firm in anchor validation) feeds an ICC(3,1) reliability test that gates whether the full 321-firm run uses single or multi-iteration mode. Full methodology in `docs/PHASE4_METHODOLOGY_v3.md`.
 
 **Scoring prompt:** `prompts/supply_rho_system.txt`
 **Scoring script:** `scripts/08_score_supply_rho.py`
@@ -240,24 +241,30 @@ Overlapping matches are deduplicated by position (longest match wins at each cha
 ```bash
 # Steps 1–7: Already complete. Do not re-run (SEC rate limits).
 # Phase 3 (prompt engineering): Already complete.
+# Phase 4: In progress (commits 90deade → b485cf1 → dbcefa9 → d7836e5 → c1acabf).
 
-# Phase 4, Step 1: write scripts/utils/llm_client.py
-# (not yet created — first Phase 4 deliverable)
+# Requires ANTHROPIC_API_KEY in .env (auto-loaded via python-dotenv)
 
-# Phase 4, Step 2: supply-side scoring (requires ANTHROPIC_API_KEY)
-export ANTHROPIC_API_KEY=sk-ant-...
-python3 scripts/08_score_supply_rho.py --test           # validate 15 anchor decompositions (~$0.50)
-python3 scripts/08_score_supply_rho.py --skip-existing  # full run (~$5)
+# Phase 4 Step 6b: anchor reliability test (14-15 firms × 3 iter, ~$0.45)
+python3 scripts/08_score_supply_rho.py --test \
+    --output data/processed/supply_rho_anchor.csv
 
-# Phase 4, Step 3: demand-side scoring
-python3 scripts/09_score_demand_delta.py --test         # validate 13 anchor decompositions
-python3 scripts/09_score_demand_delta.py --skip-existing  # full run (~$5)
+# Compute ICC(3,1) and decide single-iter vs multi-iter for full run
+# (See docs/PHASE4_METHODOLOGY_v3.md Section 5.6 for decision protocol)
+
+# Phase 4 Step 7: full supply scoring
+python3 scripts/08_score_supply_rho.py --skip-existing \
+    --output data/processed/supply_rho.csv         # 321 firms, ~$3-10
+
+# Phase 4 Step 8: demand scoring (requires writing 09_score_demand_delta.py first)
+python3 scripts/09_score_demand_delta.py --skip-existing \
+    --output data/processed/demand_delta.csv       # 321 firms, ~$5
 
 # Phase 5: regressions
 Rscript analysis/did_v3.R
 ```
 
-Scoring uses `claude-haiku-4-5-20251001` with prompt caching enabled. Total scoring budget is ~$10 across 321 firms × 2 sides.
+Total scoring budget: ~$10-15 for both supply and demand across 321 firms.
 
 ---
 
@@ -294,3 +301,4 @@ Scoring uses `claude-haiku-4-5-20251001` with prompt caching enabled. Total scor
 - All scoring uses pre-shock 10-K Item 1 text — scores must not be recomputed from later filings
 - All figures are generated in `notebooks/thesis_notebook.ipynb` — no standalone figure scripts
 - Scoring model is hard-pinned to `claude-haiku-4-5-20251001`; larger models would exceed the project budget
+- Phase 4 methodology document at `docs/PHASE4_METHODOLOGY_v3.md` is the authoritative reference for ρ scoring (R-rubric, aggregation formula, ICC thresholds, instrument validity defense)

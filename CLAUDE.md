@@ -2,7 +2,7 @@
 
 This file tells Claude (or any AI assistant) exactly what this repository is and how to work within it correctly. Read it fully before touching any code or data.
 
-Last substantive update: 2026-04-24 (post-Phase-3 prompt revision and repo cleanup).
+Last substantive update: 2026-04-28 (Phase 4 R-rubric pivot, smoke validation complete).
 
 ---
 
@@ -55,26 +55,30 @@ Alternative "effective exposure" specification and full robustness battery docum
 
 ### Supply Side: ρ_i (LLM Replicability Score)
 
-**Prompt:** `prompts/supply_rho_system.txt` (revised 2026-04-24, commit aa2f687)
-**Script:** `scripts/08_score_supply_rho.py` (Phase 4 — not yet created)
-**Output:** `data/processed/lit_scores.csv`
+**Prompt:** `prompts/supply_rho_system.txt` (de-anchored 2026-04-28, commit c1acabf)
+**Script:** `scripts/08_score_supply_rho.py` (multi-iter scoring, commit b485cf1)
+**Output:** `data/processed/supply_rho.csv` (renamed from `lit_scores.csv` in Step 5)
 
-Measures the fraction of a firm's product task bundle that an LLM can replicate at near-zero marginal cost. Applied at the product level — one level up from Eloundou et al. (2024) who classify worker tasks.
+Measures the fraction of a firm's product task bundle that an LLM can replicate at near-zero marginal cost. Applied at the product level — one level up from Eloundou et al. (2024) who classify worker tasks. The R-rubric is software-adapted from Eisfeldt-Schubert-Zhang (2023) and follows Acemoglu-Restrepo (2018, 2022) task-substitution logic.
 
-**Framework (E0 / E1 / E2):**
-- **E1** — direct LLM exposure: output is primarily text, document processing, communication, matching/ranking/routing on text content, structured queries, template generation
-- **E2** — LLM + standard tools: requires database read/write or API calls before generating language output; a developer could build this in months using off-the-shelf components
-- **E0** — no meaningful LLM exposure: continuously updating real-time data streams, physical hardware interaction, sub-second latency SLA as the product, deep proprietary system integration as the core moat
+**Framework (R0 / R1 / R2):**
+- **R1** — direct LLM substitute (vanilla LLM via chat/API): text generation, classification, summarization, translation, drafting communications, structured extraction
+- **R2** — LLM + standard tools: RAG over document corpus, SQL queries + LLM synthesis, code execution sandbox, simple multi-step workflows
+- **R0** — outside LLM scope: hard latency constraints, hardware control, massive scale economics, deterministic computation, deeply proprietary integration, regulated final attestation
 
-**Score formula (pure Eloundou β aggregation):**
+**Score formula (pure Eloundou β aggregation, retained from Phase 3):**
 ```
-raw_exposure     = (E1_count + 0.5 × E2_count) / n_tasks
+raw_exposure     = (R1_count + 0.5 × R2_count) / n_tasks
 normalized_score = round(raw_exposure × 99 + 1, 1)   ∈ [1, 100]
 ```
 
-This is the Eloundou et al. (2024) β coefficient (E1 + 0.5·E2 / n_tasks) applied verbatim, scaled to a 1–100 interval. The score emerges deterministically from task classification — no researcher-calibrated adjustments, no integration penalty, no anchor target pull.
+This is the Eloundou et al. (2024) β coefficient applied verbatim, scaled to a 1–100 interval. The score emerges deterministically from `compute_aggregates()` which derives counts from validated task labels — the model is never asked to self-report counts. This eliminated the self-consistency failure mode observed in Step 6a smoke v2 (commit `d7836e5`).
 
-**Methodological constraint (prompt-level):** The prompt explicitly forbids the model from targeting any expected score. The fourteen anchor firms embedded in the prompt illustrate task decomposition patterns (which tasks belong to E0/E1/E2 for a given product type) but are NOT numeric calibration targets. This was a deliberate Phase 3 change (commit aa2f687) to eliminate researcher discretion from the measurement.
+**Methodological constraint (prompt-level):** The prompt explicitly forbids the model from targeting any expected score. Five anchor archetypes (EGAN, ZS, HUBS, SPGI, DDOG) embedded in the prompt illustrate task decomposition patterns (which tasks belong to R0/R1/R2 for a given product type) but are NOT numeric calibration targets. Numeric ρ scores were removed from anchor examples in commit `c1acabf` after smoke evidence showed residual anchor-pull leakage was empirically zero but methodologically risky.
+
+**Multi-iter reliability validation:** The `--iterations N` flag (default 1, max 3) runs N independent scorings per firm. Step 6b will use 3 iterations on the 14-15 firm anchor sample to compute ICC(3,1). Decision gate per `docs/PHASE4_METHODOLOGY_v3.md` Section 5.6: ICC ≥ 0.90 → single-run full sample (321 × 1 = ~$3); 0.75-0.90 → multi-run (321 × 3 = ~$10); < 0.75 → reject and revise prompt.
+
+**Methodology document:** Full methodology is in `docs/PHASE4_METHODOLOGY_v3.md` (current version v3.3, 860 lines, commit `c1acabf`). The document contains the conceptual lineage (Eloundou 2024, Eisfeldt-Schubert-Zhang 2023, Labaschin et al. 2025), full R-rubric specification, ICC threshold rationale (Koo & Li 2016), and Section 7.6 on Capability Dynamics & Instrument Validity (three-layer defense for the temporal-capability concern).
 
 **Task decomposition examples — 15 firms in the prompt (9 software + 5 knowledge + 1 placebo):**
 
@@ -96,7 +100,7 @@ This is the Eloundou et al. (2024) β coefficient (E1 + 0.5·E2 / n_tasks) appli
 | CHGG | knowledge | Homework help + textbook services — Q&A platform, writing assistance, tutoring marketplace |
 | PFE | placebo | Pharmaceutical manufacturer — drug discovery, clinical trials, manufacturing, FDA approval |
 
-Note: these firms appear in the prompt as **reasoning examples**, not calibration targets. The `rho` field in `config/anchor_firms.yaml` still contains the old target scores (10, 16, 22, ..., 88) — this yaml file requires a Phase 4 decision on how to use it (see Phase 4 section below).
+Note: these firms appear in the prompt as **reasoning examples**, not calibration targets. The prompt now lists 5 archetypes (EGAN, ZS, HUBS, SPGI, DDOG) — one per business-model archetype. The full anchor sample of 14 firms in `config/anchor_firms.yaml` is used for the Step 6b reliability run (3 iterations each, ICC(3,1) computation). PFE is appended programmatically by `08_score_supply_rho.py` as a placebo when its 10-K text is present.
 
 **Scoring source:** Must use pre-shock 10-K Item 1 text from `text_data/10k_extracts/`. Never score from web research or post-shock filings.
 
@@ -150,8 +154,8 @@ Each anchor entry retains its narrative profile (which switching-cost mechanisms
 | Phase 3 — prompts revised | `prompts/*.txt` | — | **DONE** (2026-04-24, commits aa2f687 + 6e23712) |
 | Phase 6 — robustness notes | `docs/phase6_notes.md` | — | **DONE** (2026-04-24, commit 75fab03) |
 | Repo cleanup | — | — | **DONE** (2026-04-24, commits 5381eee + 3018b61) |
-| 8. Supply scoring (ρ_i) | `08_score_supply_rho.py` | `data/processed/lit_scores.csv` | **NEXT (Phase 4)** — requires llm_client.py first |
-| 9. Demand scoring (δ_i) | `09_score_demand_delta.py` | `data/processed/demand_friction.csv` | After step 8 |
+| 8. Supply scoring (ρ_i) | `08_score_supply_rho.py` | `data/processed/supply_rho.csv` | **IN PROGRESS** — smoke validated (commit `c1acabf`); anchor reliability run (Step 6b) pending |
+| 9. Demand scoring (δ_i) | `09_score_demand_delta.py` (not yet created) | `data/processed/demand_delta.csv` | After Step 7 (full supply run) |
 | 10. DiD regressions | `analysis/did_v3.R` | — | After steps 8–9 |
 
 ---
@@ -199,72 +203,56 @@ Supply (~4,200 tokens) is just above the 4,096-token Haiku 4.5 cache minimum; de
 
 ---
 
-## Phase 4 Pending (Scoring Validation and Execution)
+## Phase 4 Status (Scoring Validation In Progress)
 
-### Step 1 — Decide anchor_firms.yaml strategy
+Phase 4 is the LLM scoring stage. Steps 4-7 form the supply-scoring pipeline; Step 8 will be the demand-scoring pipeline (not yet started).
 
-The yaml still contains numeric `rho` and `d_*` fields from the pre-Phase-3 prompts. These no longer match prompt structure. Three options:
+### Steps Completed
 
-**Option A — Clean yaml with task-distribution checks**
-Replace numeric expected scores with task-distribution rules (e.g., ZS: "≥70% E0 tasks", PFE: "100% E0 tasks"). Decision gate asks whether the model's task classification distribution matches the rule, not whether the final score matches a number.
+| Step | Commit | What |
+|------|--------|------|
+| 4 — Schema + R-rubric prompt rewrite | `90deade` | E0/E1/E2 → R0/R1/R2; 5 anchor archetypes; per-task reasoning |
+| 5 — Multi-iter infra + ICC utility | `b485cf1` | `--iterations N` flag; new wide CSV; `scripts/utils/icc.py` |
+| 6a-patch — Reasoning length fix | `dbcefa9` | `max_length` 200→350 (model writes ~250 char naturally) |
+| 6a-patch2 — Remove model-reported counts | `d7836e5` | Schema returns only ticker/tasks/overall_reasoning; `compute_aggregates()` derives counts |
+| 6a-patch3 — De-anchor prompt + add methodology | `c1acabf` | Removed Section 3 sectoral priors and Section 7 numeric scores; methodology v3.3 added at `docs/PHASE4_METHODOLOGY_v3.md` |
 
-**Option B — Keep yaml as post-hoc sanity check only**
-Retain numeric expected scores but do NOT iterate on mismatch. Run anchor test, report actual-vs-expected table in thesis as informational ("scores achieved Spearman ≥ X against ex-ante author expectations"). No gating.
+### Smoke Test Results (post-c1acabf)
 
-**Option C — Eloundou-grounded yaml (supply only)**
-Download Eloundou `occ_level.csv` from github.com/openai/GPTs-are-GPTs, map SIC 7370–7379 → SOC-6 occupations via BLS OEWS employment weights, compute expected β-aggregated score per firm. Gate: `|AI ρ_i − Eloundou aggregate| ≤ 15`. Literature-grounded expected values; strongest defense against anchor-pull critique.
+| Firm | Predicted Range (advisory) | Observed ρ_mean | ρ_std | Verdict |
+|------|----------------------------|-----------------|-------|---------|
+| ZS | [40, 55] | 42.2 | 7.58 | IN RANGE |
+| EGAN | [70, 90] (revised) | 75.4 | 6.96 | IN RANGE |
+| HUBS | [65, 85] | 76.0 | 3.91 | IN RANGE |
 
-Recommended split: Option C for supply (external literature grounding), Option B for demand (no external benchmark exists; cross-LLM Haiku-vs-Gemini ICC becomes the primary reliability gate). Decision is pending and must be made before Phase 4 Step 3.
+EGAN range was revised from [85, 100] to [70, 90] in methodology v3.2 after the model consistently identified knowledge-base retrieval as R2 (RAG, not vanilla R1). All three smoke firms now produce clean multi-iteration output. ZS smoke v3 → v4 shift was 0.0 points (de-anchoring had zero empirical effect).
 
-### Step 2 — Build `scripts/utils/llm_client.py`
+### Next Steps
 
-Shared LLM client module. Required capabilities:
-- Anthropic API, model hard-pinned to `claude-haiku-4-5-20251001` (NEVER Sonnet or Opus — would 10× the budget)
-- Prompt caching enabled for system prompts (both supply and demand prompts are well above the 1,024-token cache threshold)
-- JSON output parsing and schema validation (fail fast on malformed output)
-- Exponential backoff retry on rate limits and 5xx errors
-- Per-call cost tracking, aggregated totals logged
-- Gemini 2.5 Flash fallback (`google-generativeai`, model `gemini-2.5-flash`) — used only if Haiku anchor validation fails, NOT used for cost reasons
-- Fail loudly on placeholder API keys (reject `ANTHROPIC_API_KEY` starting with `REPLACE-ME` or empty string)
+**Step 6b (next):** 14-15 firm anchor reliability run. `python3 scripts/08_score_supply_rho.py --test` (defaults to `--iterations 3` in test mode). Output: `data/processed/supply_rho_anchor.csv`. Cost: ~$0.45. Then `python3 scripts/utils/icc.py` to compute ICC(3,1) on `rho_iter1/2/3` columns.
 
-Reference implementations (`scripts/utils/logging_setup.py`, `scripts/utils/edgar.py`) set the style for module structure. The two deprecated scorer scripts that used to contain API call patterns (`score_literature_rubric.py`, `score_demand_friction.py`) were deleted in commit 5381eee — this was deliberate. `llm_client.py` must be written fresh with current-methodology compatibility (no integration penalty, correct prompt path names, Haiku-pinned).
+Decision gate (from `docs/PHASE4_METHODOLOGY_v3.md` Section 5.6):
+- ICC ≥ 0.90 → proceed to Step 7 single-run full sample (321 × 1 = ~$3.21)
+- 0.75 ≤ ICC < 0.90 → proceed to Step 7 multi-run full sample (321 × 3 = ~$9.63)
+- ICC < 0.75 → reject; methodology requires further refinement
 
-### Step 3 — Write new scoring scripts
+**Step 7:** Full sample scoring (321 firms × N iterations). Output: `data/processed/supply_rho.csv` (different file from anchor reliability output). Iteration count determined by Step 6b ICC result.
 
-- `scripts/08_score_supply_rho.py` — calls `llm_client.py`, uses `prompts/supply_rho_system.txt`, outputs to `data/processed/lit_scores.csv`
-- `scripts/09_score_demand_delta.py` — calls `llm_client.py`, uses `prompts/demand_delta_system.txt`, outputs to `data/processed/demand_friction.csv`
+**Step 8 (Phase 4 demand pipeline):** Demand scoring for 321 firms. Requires `scripts/09_score_demand_delta.py` (not yet created), uses preserved Phase 3 prompt at `prompts/demand_delta_system.txt`. Spec to be issued after supply pipeline completes.
 
-### Step 4 — Supply anchor test
+### Phase 4 Cumulative Cost Tracker
 
-`python3 scripts/08_score_supply_rho.py --test`
+| Stage | Cost |
+|-------|------|
+| Smoke v1 (failed) | $0.22 |
+| Smoke v2 (HUBS+EGAN clean) | $0.07 |
+| Smoke v3 (ZS clean post-patch2) | $0.06 |
+| Smoke v4 (ZS post-de-anchor verification) | $0.06 |
+| **Phase 4 to date** | **$0.41** |
+| Step 6b anchor reliability (14 × 3) | +$0.45 |
+| Step 7 full sample (single-iter or multi-iter) | +$3.21 to +$9.63 |
 
-Scores the 15 anchor firms listed in the prompt (~$0.50 budget). Decision gate depends on Step 1 choice:
-- **Option A** — task classification distribution check (e.g., ZS must produce ≥70% E0 tasks, PFE must produce 100% E0 tasks)
-- **Option B** — report actual vs. expected `rho`; no iteration
-- **Option C** — `|ρ_i − Eloundou firm aggregate| ≤ 15` for all 15 anchors
-
-If gate fails: iterate on `supply_rho_system.txt` prompt, or switch to Gemini fallback.
-
-### Step 5 — Demand anchor test
-
-`python3 scripts/09_score_demand_delta.py --test`
-
-Scores the 13 anchor firms. Primary gate: **cross-LLM inter-rater reliability** (score the same 13 firms with both Haiku and Gemini, compute ICC(3,1), target ≥ 0.90). This replaces the old "Spearman ≥ 0.80 against expected" gate that no longer makes sense once numeric targets were removed from the prompt.
-
-### Step 6 — Reliability block (test-retest)
-
-30-firm subsample (5 from each of 6 `sector_code` values). Score each firm three times with the same prompt, same inputs, temperature=0. Compute ICC(3,1) intraclass correlation for both supply and demand. Decision gate: ICC ≥ 0.90.
-
-If ICC fails: add structured reasoning chains before numeric output in the prompt (chain-of-thought before JSON), or increase example density in the task decomposition section.
-
-### Step 7 — Full scoring run (after all gates pass)
-
-```
-python3 scripts/08_score_supply_rho.py --skip-existing    # 321 firms, ~$5
-python3 scripts/09_score_demand_delta.py --skip-existing  # 321 firms, ~$5
-```
-
-Total budget: ~$10 for both sides across all 321 firms.
+Methodology v3 envelope: $5-15 total Phase 4. We are tracking inside.
 
 ---
 
@@ -276,7 +264,7 @@ Total budget: ~$10 for both sides across all 321 firms.
    - Microsoft Copilot applicability scores (Tomlinson et al. 2025)
    - Felten LM-AIOE and genAI-AIOE (2023 updates)
 
-2. **Master panel assembly:** Merge all panels (firm_universe + financial + RPO + billings + margin + AI mention + lit_scores + demand_friction) into `master_panel.parquet`. This is the input to R.
+2. **Master panel assembly:** Merge all panels (firm_universe + financial + RPO + billings + margin + AI mention + supply_rho + demand_delta) into `master_panel.parquet`. This is the input to R.
 
 3. **R econometrics (`analysis/did_v3.R`):**
    - `did_baseline` — fixest two-way FE with Post×ρ
@@ -309,8 +297,9 @@ scripts/
   05_build_billings_panel.py    # DONE — billings = revenue + gap-aware rpo_delta
   06_build_margin_panel.py      # DONE — 5 ratios from financial_panel, P1/P99 winsorized
   07_build_ai_mention_panel.py  # DONE — AI mention counts from 10-K/10-Q full text
-  08_score_supply_rho.py        # NOT YET CREATED — Phase 4, needs llm_client.py first
-  09_score_demand_delta.py      # NOT YET CREATED — Phase 4
+  08_score_supply_rho.py        # DONE (commits b485cf1 + dbcefa9 + d7836e5) — multi-iter scoring with R-rubric schema
+  09_score_demand_delta.py      # NOT YET CREATED — Phase 4 Step 8 (after supply pipeline complete)
+  build_eloundou_corpus.py      # KEPT for Phase 6 robustness alternative (ONET embedding match) — not used in primary scoring
 
   utils/
     __init__.py
@@ -318,16 +307,20 @@ scripts/
     xbrl.py                     # XBRL extraction, Q4 formula, RPO fallback chain
     text_sections.py            # 10-K section parser (Item 1 extraction + iXBRL)
     logging_setup.py            # Structured logging
-    llm_client.py               # NOT YET CREATED — Phase 4 first deliverable
+    llm_client.py               # DONE — schema-agnostic API client with cache verification + retry logic
+    schemas.py                  # SupplyScore + DemandScore + ProductTaskWithRubric + compute_aggregates()
+    icc.py                      # ICC(3,1) computation utility (Koo & Li 2016) — Phase 4 Step 5 commit b485cf1
+    task_matching.py            # KEPT for Phase 6 robustness alternative — not used in primary scoring
 
 analysis/
   did_v3.R                      # Two-way FE DiD + WCB; update after scoring
 
 prompts/
-  supply_rho_system.txt         # Phase 3 revised — pure Eloundou β, no anchor targets, no penalty
-  demand_delta_system.txt       # Phase 3 revised — strengthened rubric, no numeric anchor targets
+  supply_rho_system.txt         # Phase 4 R-rubric (R0/R1/R2), de-anchored archetypes (commit c1acabf, ~20.3KB)
+  demand_delta_system.txt       # Phase 3 (preserved) — δ_switch/δ_error/δ_data, 6-level rubric (~23.1KB)
 
 docs/
+  PHASE4_METHODOLOGY_v3.md      # Full Phase 4 methodology v3.3 — R-rubric, ICC, capability dynamics defense
   phase6_notes.md               # Thesis writing phase notes — robustness battery + methodology defense
 
 config/
@@ -338,22 +331,30 @@ config/
   universe_tickers.yaml         # Explicit ticker lists per tier
 
 data/
+  external/
+    eloundou_full_labelset.tsv         # ONET task corpus from Eloundou et al. (2024) — Phase 6 robustness only
+    eloundou_task_embeddings.parquet   # Pre-computed task embeddings for embedding-match alternative — Phase 6 only
   raw/
-    firm_universe.csv           # 321 firms: ticker, CIK, SIC, exchange, tier, sector_code
+    firm_universe.csv                  # 321 firms: ticker, CIK, SIC, exchange, tier, sector_code
+    edgar_cache/                       # SEC EDGAR API response cache — gitignored, populated on demand
   processed/
     financial_panel.csv         # 321 firms, 61,857 obs (10 metrics, 2019Q1–2025Q4)
     rpo_quarterly.csv           # 279 firms, 5,293 rows (quarterly RPO snapshots)
     billings_panel.csv          # 321 firms, 8,207 rows (revenue + gap-aware rpo_delta)
     margin_panel.csv            # 321 firms, 41,960 rows (5 ratios, P1/P99 winsorized)
     ai_mention_panel.csv        # 321 firms, 8,437 filings (22-pattern lexicon, 3 categories)
-    lit_scores.csv              # Supply scores (ρ_i) — 247 STALE entries from pre-Phase-3; will be overwritten in Phase 4
+    supply_rho_smoke_v2.csv     # Phase 4 Step 6a smoke v2 (HUBS+EGAN clean) — diagnostic record, kept
+    supply_rho_smoke_v3.csv     # Phase 4 Step 6a-patch2 smoke (ZS clean) — diagnostic record, kept
+    supply_rho_smoke_v4.csv     # Phase 4 Step 6a-patch3 smoke (ZS post-de-anchor) — diagnostic record, kept
+    supply_rho_errors.jsonl     # Error log from smoke iterations (4 entries, all resolved)
+    # supply_rho_anchor.csv       — Step 6b output (not yet generated)
+    # supply_rho.csv               — Step 7 output (not yet generated)
     billings_panel_qa.json      # QA log: billings coverage per firm
     margin_panel_qa.json        # QA log: margin warnings per firm
     ai_mention_panel_qa.json    # QA log: mention counts per firm
     rpo_quarterly_qa.json       # QA log: RPO tag coverage per firm
     financial_panel_qa.json     # QA log: financial metric coverage per firm
     extraction_qa.json          # QA log: 10-K extraction quality
-    panel.csv                   # STALE — 223 firms, old schema; do not use
 
 text_data/
   10k_extracts/                 # Pre-shock 10-K Item 1 text (gitignored) — 321 files
@@ -461,12 +462,13 @@ notebooks/
 8. **Don't run scoring scripts without setting ANTHROPIC_API_KEY** — they fail silently after rate-limit delay
 9. **Don't treat billings=NaN as imputable** — it means rpo_delta was non-computable; filter at analysis time, never fill
 10. **Don't use `data/processed/panel.csv`** — stale 223-firm file; use `financial_panel.csv` + `rpo_quarterly.csv`
-11. **Don't use claude-sonnet-4-6, Sonnet, Opus, or any larger model for scoring** — `claude-haiku-4-5-20251001` is the only model within budget; Sonnet/Opus would cost $30–100
+11. **Don't use Sonnet, Opus, or any larger model for scoring** — `claude-haiku-4-5-20251001` is the only model hard-pinned in `llm_client.py` and the only one within budget; larger models would cost 10-30× more.
 12. **Don't leak API keys to CLAUDE.md, commit messages, or remote chat** — `.env` only, never in shared context
 13. **Don't skip the anchor validation gate** — unvalidated scores are noise; budget spent on a bad full run cannot be recovered
 14. **Don't re-introduce the integration depth penalty** — it was deliberately removed in commit aa2f687 to eliminate researcher discretion. Pure Eloundou β is the methodology anchor.
 15. **Don't re-introduce numeric anchor targets to prompts** — the Phase 3 design principle is that scores emerge from rubric matching, not from firm-specific calibration. Adding "expected score ≈ X" lines to either prompt reintroduces anchor-pull.
 16. **Don't re-create deleted scripts** — `score_literature_rubric.py`, `score_demand_friction.py`, and the four unnumbered pipeline scripts were deleted in commit 5381eee. Phase 4 scripts must be written fresh to match current methodology (no penalty, correct prompt paths, Haiku-pinned).
+17. **Don't trust model-reported aggregate counts** — the `SupplyScore` schema deliberately removed `r0_count`, `r1_count`, `r2_count`, `n_tasks`, `raw_exposure`, and `normalized_score` from the model output (commit `d7836e5`). All aggregates are computed from `tasks` labels via `compute_aggregates()`. If you find yourself adding count fields back, you are recreating the self-consistency failure mode that took down the ZS smoke v2 run.
 
 ---
 
@@ -475,29 +477,27 @@ notebooks/
 ```bash
 # Steps 1–7 already done. Do not re-run without good reason (SEC rate limits).
 # Phase 3 complete (commits aa2f687 + 6e23712 + 75fab03 + 5381eee + 3018b61).
+# Phase 4 in progress: schema + prompt + multi-iter infra + de-anchored prompt
+# committed at 90deade → b485cf1 → dbcefa9 → d7836e5 → c1acabf.
 
-# Phase 4, Step 1: decide anchor_firms.yaml strategy (Option A / B / C)
-# [manual decision — no script]
+# Phase 4 Step 6b (next): anchor reliability test
+# Requires ANTHROPIC_API_KEY in .env (auto-loaded via python-dotenv)
+python3 scripts/08_score_supply_rho.py --test \
+    --output data/processed/supply_rho_anchor.csv     # 14-15 firms × 3 iter, ~$0.45
 
-# Phase 4, Step 2: build llm_client utility
-# [write scripts/utils/llm_client.py — not yet created]
+# Compute ICC(3,1) on the anchor reliability output
+python3 scripts/utils/icc.py    # self-test only; full computation requires custom call
 
-# Phase 4, Step 3: write scoring scripts
-# [write scripts/08_score_supply_rho.py and 09_score_demand_delta.py]
+# Phase 4 Step 7 (after ICC gate): full sample scoring
+# Iteration count determined by ICC band:
+#   ICC ≥ 0.90 → single-iter (~$3.21)
+#   0.75-0.90 → multi-iter (~$9.63)
+python3 scripts/08_score_supply_rho.py --skip-existing \
+    --output data/processed/supply_rho.csv             # 321 firms
 
-# Phase 4, Step 4: supply anchor test
-export ANTHROPIC_API_KEY=sk-ant-...
-python3 scripts/08_score_supply_rho.py --test           # 14 anchors, ~$0.50
-
-# Phase 4, Step 5: demand anchor test
-python3 scripts/09_score_demand_delta.py --test         # 13 anchors, ~$0.50
-
-# Phase 4, Step 6: reliability block (30-firm × 3 iterations)
-# [run both scripts three times on a 30-firm subsample, compute ICC]
-
-# Phase 4, Step 7: full scoring run (after gates pass)
-python3 scripts/08_score_supply_rho.py --skip-existing  # full run, ~$5
-python3 scripts/09_score_demand_delta.py --skip-existing  # full run, ~$5
+# Phase 4 Step 8: demand scoring (requires writing 09_score_demand_delta.py first)
+python3 scripts/09_score_demand_delta.py --skip-existing \
+    --output data/processed/demand_delta.csv           # 321 firms
 
 # Phase 5: regressions
 Rscript analysis/did_v3.R
