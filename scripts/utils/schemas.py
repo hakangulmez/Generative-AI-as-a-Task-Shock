@@ -40,8 +40,8 @@ class ProductTaskWithRubric(BaseModel):
     reasoning: str = Field(
         ...,
         min_length=30,
-        max_length=200,
-        description="Brief justification for the R-label (1-2 sentences referencing decision heuristics)",
+        max_length=350,
+        description="Justification for the R-label (1-3 sentences citing decision heuristics; keep concise)",
     )
 
 
