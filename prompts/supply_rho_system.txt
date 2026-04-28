@@ -108,32 +108,49 @@ product tasks (do not separately credit them as already-LLM).
 
 ─── Task elicitation procedure ───
 
-To produce stable task decompositions across iterations, follow this
-procedure:
+To produce stable task decompositions across iterations, choose
+one of two strategies based on the 10-K's structure:
 
-  Step A. Read the 10-K Item 1 carefully and identify the firm's
-  disclosed BUSINESS SEGMENTS or PRODUCT LINES. (Examples: "Veeva
-  CRM", "Veeva Vault"; "Falcon Platform Endpoint Security",
-  "Identity Protection"; "HUBS Marketing Hub", "Sales Hub".)
-  If no segments are named, treat the product as a single platform.
+STRATEGY 1 — Multi-segment firms (use this only if applicable)
 
-  Step B. Assign 2–3 tasks per segment, drawn strictly from
-  customer-visible capabilities described in Item 1. Do not invent
-  tasks not mentioned in the filing.
+If the 10-K Item 1 EXPLICITLY discloses 2 or more NAMED, DISTINCT
+product lines or business segments — for example "our Falcon Platform
+includes Endpoint Security, Cloud Workload Protection, and Identity
+Protection" or "S&P Global operates four divisions: Ratings, Market
+Intelligence, Indices, and Commodity Insights" — use segment-anchored
+elicitation:
 
-  Step C. Combine the per-segment tasks into a single list of 8–10.
-  If the combined list exceeds 10, merge the closest-related pairs
-  within each segment. If it falls below 6, split one broad task.
+  Step A. List the disclosed segments verbatim from the 10-K.
+  Step B. Assign 2-3 customer-facing tasks per segment, drawn from
+  Item 1 text describing that specific segment.
+  Step C. Combine into 8-10 total tasks across all segments.
 
-  Step D. Single-platform fallback: if the firm discloses no
-  distinct segments, elicit 8–10 tasks directly from the product
-  description — but still group them by functional area (e.g.,
-  "data ingestion", "monitoring & alerting", "collaboration &
-  workflow") and draw at least one task from each area.
+STRATEGY 2 — Single-platform firms (default)
 
-This procedure ensures the same filing produces the same task
-structure on repeated scoring — reducing inter-iteration variance
-in task count and composition.
+If the 10-K describes the firm as a single integrated platform
+(e.g., "HubSpot is the customer platform"), or if the disclosed
+"segments" are revenue-reporting categories rather than product
+lines (e.g., "U.S. Commercial / International / Other"), do NOT
+attempt to invent segmentation. Instead:
+
+  Step A. List 8-10 customer-facing tasks directly from the
+  product description, grouped by functional area (e.g., for a
+  CRM platform: "campaign management", "lead capture", "sales
+  pipeline tracking", "customer service ticketing", "reporting
+  & analytics").
+  Step B. Aim for proportional coverage of the platform's major
+  capability areas.
+
+DECISION RULE: Default to Strategy 2 unless the 10-K's segment
+disclosure is unambiguous. If you find yourself uncertain whether
+to apply Strategy 1, that uncertainty itself is the signal to use
+Strategy 2 — inventing segmentation introduces inter-iteration
+variance.
+
+This procedure ensures consistent task structure: multi-segment
+firms anchor to disclosed segments; single-platform firms anchor
+to functional areas. The same firm produces the same task structure
+across repeated scoring under both strategies.
 
 ═══════════════════════════════════════════════════════════════
 SECTION 5 — STEP 3: CLASSIFY EACH TASK AS R0 / R1 / R2
