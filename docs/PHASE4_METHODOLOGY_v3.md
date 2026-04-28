@@ -421,6 +421,15 @@ Where BMS = between-subjects mean square, EMS = error mean square, k = 3 (iterat
 - 0.75 ≤ ICC < 0.90: ~$15 supply scoring (963 calls) + $15 demand = $30
 - ICC < 0.75: pause and reconsider
 
+**Empirical calibration note (added v3.4):** Step 6b anchor validation observed
+that task elicitation stability is the dominant ICC determinant for
+multi-segment firms. This is addressed by the segment-anchored task
+elicitation directive added to prompt Section 4. The classification
+heuristics in Section 5b address the secondary source (R0/R2 boundary
+disagreement) but do not resolve task list instability. The empirical
+distinction between task-list variance and label variance is reported
+in the validation appendix.
+
 ---
 
 ## Section 6 — Mental Walkthrough Sanity Check (Predictions)
@@ -843,7 +852,8 @@ Multi-run averaging reduces but does not eliminate single-firm classification no
 | 2026-04-27 | v3.0 (this) | Added Eloundou self-acknowledged limitations to Section 3.2 and 7.1; verified Eisfeldt citation source (slides + Internet Appendix C); added Section 4.3 (R0/R2 boundary worked examples); narrowed task target from 6-12 to 8-10; added Q7 (measurement error reporting) | Web Claude |
 | 2026-04-27 | v3.1 (current) | **Citation fix:** Eisfeldt et al. → Eisfeldt-Schubert-Zhang (2023, NBER WP 31222) — earlier "(2024)" was incorrect publication year. Added verbatim E1 rubric quote from Eisfeldt-Schubert-Zhang slides into Section 7.2. **New Section 7.3:** Labaschin et al. (2025) AEA P&P firm-workforce aggregation precedent — earlier session mistakenly conflated this Eloundou-team firm extension paper with Eisfeldt's separate paper. Section now explicitly distinguishes worker-channel S1 (Labaschin) from product-channel S2/S3 (this thesis). Renumbered 7.3→7.4 and 7.4→7.5. | Web Claude |
 | 2026-04-28 | v3.2 (current) | **Schema refinement post-smoke (commits `dbcefa9`, `d7836e5`):** Per-task reasoning max_length 200→350 (model output ~250 char natural). Removed model-reported counts from `SupplyScore` — `r0_count/r1_count/r2_count/n_tasks/raw_exposure/normalized_score` now computed deterministically from `tasks` labels via `compute_aggregates()` helper. Eliminates self-consistency failure mode observed in ZS smoke v2 (model produced inconsistent counts across retries). Schema now requires only `ticker/tasks/overall_reasoning` from model. **Section 6.1 empirical update:** Smoke test (ZS, EGAN, HUBS, 3 iter each) produced rho_mean = (42.2, 75.4, 76.0). EGAN [85,100] → [70,90] revised (pure-R1 prediction was optimistic; KB retrieval is naturally R2). Predicted ranges now advisory, not decision gates — ICC (Section 5.6) is authoritative. | Web Claude |
-| 2026-04-28 | v3.3 (current) | **New Section 7.6 (Capability Dynamics and Instrument Validity):** Three-layer defense added — (1) static treatment + dynamic outcome via event-study (Eloundou convention), (2) frozen instrument vintage with hash-recorded prompt + hardpinned model ID, (3) cross-model ICC robustness check planned for Phase 6 (~$0.15-0.30, second LLM TBD between GPT-4.1 / Gemini 2.5). Adds defense paragraph for thesis writeup. **Planned prompt revision (next commit):** (a) Section 3 sectoral priors removed (anchor-pull mitigation), (b) Section 7 anchor numeric scores removed, distributions retained (R-structure shown without prediction targets), (c) Section 2 vintage framing tweak ("ChatGPT-class Q4 2022" replacing anachronistic "GPT-4 / Claude-Sonnet"). Phase 6 robustness items recorded: inter-model triangulation, R0 multi-axis decomposition, double-pass extract+classify, granularity drift transparency table. | Web Claude |
+| 2026-04-28 | v3.4 (current) | Step 6b anchor reliability validation produced ICC=0.7474 (95% CI [0.52, 0.90]), 0.003 below the 0.75 "good" threshold. Diagnostic analysis identified task decomposition instability (not label instability) as the dominant variance source in 3 of 4 high-variance firms. Patch6 adds segment-anchored task elicitation (Section 4) and regulatory-determinism R0 criterion (Section 5), plus soft anchor recalibration. Re-run produces revised ICC. | Web Claude |
+| 2026-04-28 | v3.3 | **New Section 7.6 (Capability Dynamics and Instrument Validity):** Three-layer defense added — (1) static treatment + dynamic outcome via event-study (Eloundou convention), (2) frozen instrument vintage with hash-recorded prompt + hardpinned model ID, (3) cross-model ICC robustness check planned for Phase 6 (~$0.15-0.30, second LLM TBD between GPT-4.1 / Gemini 2.5). Adds defense paragraph for thesis writeup. **Planned prompt revision (next commit):** (a) Section 3 sectoral priors removed (anchor-pull mitigation), (b) Section 7 anchor numeric scores removed, distributions retained (R-structure shown without prediction targets), (c) Section 2 vintage framing tweak ("ChatGPT-class Q4 2022" replacing anachronistic "GPT-4 / Claude-Sonnet"). Phase 6 robustness items recorded: inter-model triangulation, R0 multi-axis decomposition, double-pass extract+classify, granularity drift transparency table. | Web Claude |
 
 ---
 

@@ -106,6 +106,35 @@ Use customer-facing language from the 10-K, not engineering jargon. If the 10-K
 mentions "AI-powered" or "machine learning" features, treat them as ordinary
 product tasks (do not separately credit them as already-LLM).
 
+─── Task elicitation procedure ───
+
+To produce stable task decompositions across iterations, follow this
+procedure:
+
+  Step A. Read the 10-K Item 1 carefully and identify the firm's
+  disclosed BUSINESS SEGMENTS or PRODUCT LINES. (Examples: "Veeva
+  CRM", "Veeva Vault"; "Falcon Platform Endpoint Security",
+  "Identity Protection"; "HUBS Marketing Hub", "Sales Hub".)
+  If no segments are named, treat the product as a single platform.
+
+  Step B. Assign 2–3 tasks per segment, drawn strictly from
+  customer-visible capabilities described in Item 1. Do not invent
+  tasks not mentioned in the filing.
+
+  Step C. Combine the per-segment tasks into a single list of 8–10.
+  If the combined list exceeds 10, merge the closest-related pairs
+  within each segment. If it falls below 6, split one broad task.
+
+  Step D. Single-platform fallback: if the firm discloses no
+  distinct segments, elicit 8–10 tasks directly from the product
+  description — but still group them by functional area (e.g.,
+  "data ingestion", "monitoring & alerting", "collaboration &
+  workflow") and draw at least one task from each area.
+
+This procedure ensures the same filing produces the same task
+structure on repeated scoring — reducing inter-iteration variance
+in task count and composition.
+
 ═══════════════════════════════════════════════════════════════
 SECTION 5 — STEP 3: CLASSIFY EACH TASK AS R0 / R1 / R2
 ═══════════════════════════════════════════════════════════════
@@ -208,6 +237,14 @@ R0 includes software tasks that meet at least one of:
     final attestation is R0)
   • Deterministic computation where any LLM error is unacceptable (financial
     settlement, cryptographic operations, transactional consistency)
+  • Regulatory-determinism: systems where execution of the process itself
+    carries regulatory liability — not merely drafting or summarizing within
+    it. Examples: FDA 21 CFR Part 11 electronic records in active clinical
+    trials (the system IS the validated process), GxP-controlled quality
+    management execution, NRSRO credit-rating issuance where the analytical
+    process is the regulated activity. Distinguish from R2 drafting: an LLM
+    drafting a regulatory report is R2; the FDA-validated system that must
+    log, audit-trail, and attest to each process step is R0.
 
 CRITICAL distinction — R0 vs δ:
 
