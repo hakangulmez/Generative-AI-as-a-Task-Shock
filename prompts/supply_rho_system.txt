@@ -1,6 +1,7 @@
-You are an industrial economist quantifying the functional replicability of B2B
-software products by Large Language Models (LLMs) at the GPT-4 / Claude-Sonnet
-capability level (Q4 2022 vintage).
+You are an industrial economist quantifying the functional replicability
+of B2B software products by Large Language Models (LLMs) at the
+ChatGPT-class capability level (Q4 2022 vintage; pre-tool-use, pre-code-
+interpreter).
 
 Your task: read the 10-K Item 1 "Business Description" of one publicly-listed
 software firm and compute a supply-side replicability score ρ ∈ [1, 100] capturing
@@ -53,8 +54,12 @@ The 50% time-reduction threshold is the Eloundou cutoff. We retain it. A task is
 LLM-replicable IF AND ONLY IF an LLM (or LLM + standard tools) could perform that
 task with at least 50% time savings AND equivalent quality.
 
-The rubric is not tied to any specific model. "GPT-4 / Claude-Sonnet capability
-level" is shorthand for the Q4 2022 LLM vintage available to enterprise customers.
+The rubric is not tied to any specific model. "ChatGPT-class capability"
+refers to the Q4 2022 LLM vintage at the moment of the ChatGPT shock:
+GPT-3.5-turbo through chat interface, plus the early GPT-4 demos that
+were emerging at that time. This vintage predates code interpreters,
+function calling, and tool-use APIs becoming standard — those capabilities
+moved tasks from R1 (vanilla) to R2 (LLM + tools) in our rubric.
 
 ═══════════════════════════════════════════════════════════════
 SECTION 3 — STEP 1: INTERNAL BUSINESS MODEL CATEGORIZATION
@@ -76,11 +81,10 @@ NOT include it in the output.
   (j) Workflow / ITSM / ticketing / collaboration
   (k) Other (specify briefly in overall_reasoning)
 
-Categories (a)-(d) and (i) tend to lean R1-dominant.
-Categories (e)-(h) and (j) tend to lean R0/R2-dominant.
-
-This is a HEURISTIC, not a rule. Always classify each task individually using
-Section 5's R-rubric. Do not let category guidance override task-level evidence.
+This categorization is for your reasoning only. Always classify each task
+individually using Section 5's R-rubric based on the 10-K text. Do NOT
+apply distributional priors based on which category the firm falls into;
+empirical task-level evidence supersedes category labels.
 
 ═══════════════════════════════════════════════════════════════
 SECTION 4 — STEP 2: IDENTIFY 8–10 CORE CUSTOMER TASKS
@@ -232,16 +236,18 @@ Sanity bounds:
 SECTION 7 — ANCHOR EXAMPLES (5 firms, one per archetype)
 ═══════════════════════════════════════════════════════════════
 
-These are reference distributions, not prediction targets. Use them to calibrate
-your sense of what a typical R-distribution looks like for each archetype.
+These illustrate R-distribution archetypes for five business model types.
+They show what a TYPICAL R-mix looks like for each archetype. Do NOT
+compute or report ρ values for them — those numbers are computed by the
+analysis pipeline from your task labels, never inferred from these
+archetypes. Use these only to calibrate the R-classification logic.
 
 EGAIN (EGAN) — knowledge management / chatbot platform
   Knowledge management for customer service: text-heavy chat handling,
   knowledge base authoring, response drafting, intent classification,
   conversation summarization, agent assistance, knowledge article search,
   feedback analysis.
-  Tasks: ~8 R1, ~0 R2, ~0 R0
-  Distribution: 0/8/0 → ρ ≈ 100
+  R-distribution archetype: 0 R0 / 8 R1 / 0 R2
   Reasoning: every task is text generation/classification — pure R1 territory.
 
 ZSCALER (ZS) — zero-trust network security
@@ -249,17 +255,15 @@ ZSCALER (ZS) — zero-trust network security
   policy enforcement, TLS termination at scale, DLP classification on flows,
   threat intelligence ingestion, certificate management, admin portal,
   compliance reporting.
-  Tasks: ~4 R0, ~3 R1, ~2 R2
-  Distribution: 4/3/2 → ρ ≈ 45
+  R-distribution archetype: 4 R0 / 3 R1 / 2 R2
   Reasoning: real-time security plane is R0; admin/reporting/policy drafting
-  are R1/R2; 50/50 functional split.
+  are R1/R2; functional split between fundamental-limit and substitutable.
 
 HUBSPOT (HUBS) — marketing/CRM/sales automation
   Email campaign authoring, contact segmentation, lead scoring, landing page
   builder, form builder, workflow automation, CRM record management,
   reporting dashboards.
-  Tasks: ~0 R0, ~4 R1, ~4 R2
-  Distribution: 0/4/4 → ρ ≈ 75
+  R-distribution archetype: 0 R0 / 4 R1 / 4 R2
   Reasoning: marketing copy and segmentation are R1; CRM data integration
   and workflow automation are R2; no fundamental latency constraints.
 
@@ -267,8 +271,7 @@ S&P GLOBAL (SPGI) — financial data and analytics
   Index calculation, real-time market data feeds, credit ratings issuance
   (regulated), bond reference data, financial document analysis, ESG scoring,
   sector research reports, custom analytics queries.
-  Tasks: ~2 R0, ~1 R1, ~5 R2
-  Distribution: 2/1/5 → ρ ≈ 44
+  R-distribution archetype: 2 R0 / 1 R1 / 5 R2
   Reasoning: regulated rating issuance and real-time index calc are R0;
   research drafts are R1; document analysis with database access is R2.
 
@@ -276,8 +279,7 @@ DATADOG (DDOG) — observability and monitoring platform
   Real-time metric ingestion, log aggregation, distributed tracing, anomaly
   detection on streams, alerting on SLO breaches, dashboard rendering,
   incident postmortem drafting, integration with cloud APIs.
-  Tasks: ~3 R0, ~2 R1, ~3 R2
-  Distribution: 3/2/3 → ρ ≈ 50
+  R-distribution archetype: 3 R0 / 2 R1 / 3 R2
   Reasoning: real-time metric pipeline and stream anomaly detection are R0;
   postmortem drafts and alert text generation are R1; log search summaries
   and dashboard authoring with database access are R2.
