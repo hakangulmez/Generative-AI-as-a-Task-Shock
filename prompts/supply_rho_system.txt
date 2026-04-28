@@ -145,10 +145,16 @@ by an LLM rather than by software.
 
 ─── R2 — LLM + standard tools substitute ────────────────────────
 
-Threshold question: Would a vanilla LLM ALONE fail to reduce the task time by
-50%, but adding standard tools (RAG / document retrieval, code interpreter,
-SQL connector, web search, simple API calls) bridge the gap to 50% time savings
-with equivalent quality?
+R2 captures tasks that were NOT directly replicable by the Q4 2022 chat
+interface alone, but become replicable once standard tool integrations
+are added — typically 1-3 months of developer effort using off-the-shelf
+components (Eisfeldt-Schubert-Zhang 2023). The aggregation formula
+weights R2 at 0.5 to reflect this partial-exposure status.
+
+Threshold question: Would a vanilla LLM ALONE fail to reduce the task time
+by 50%, but adding standard tool integrations (RAG / document retrieval,
+SQL connector, code execution sandbox, web search, simple API calls)
+bridge the gap to 50% time savings with equivalent quality?
 
 If yes → R2.
 
@@ -161,6 +167,13 @@ R2 includes software tasks that require:
   • Web search + summarization (research, due diligence)
   • Simple multi-step workflows (read → call API → format → respond)
   • Basic structured-data lookup (CRM record retrieval + draft email)
+
+Note: these tool integrations were not part of the Q4 2022 ChatGPT
+release. The R2 classification represents what an enterprise developer
+could BUILD on top of the Q4 2022 LLM frontier with standard
+engineering effort — not what was available out-of-the-box from a
+chat interface. The β aggregation (R1 + 0.5×R2) reflects this
+near-frontier, tool-augmented exposure status.
 
 The R2 boundary against R0: if the tool integration is "standard"
 (SQL, RAG, code exec, web search), it's R2. If the integration is "deep
